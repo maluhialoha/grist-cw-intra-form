@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grist Custom Widget</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: #ffffff;
+      padding: 24px;
+      color: #37352f;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: white;
+      z-index: 2000;
+    }
+
+    .modal.show {
+      display: block;
+    }
+
+    .modal-content {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .modal-header h2 {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+      color: #999;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .close-btn:hover {
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 24px;
+    }
+
+    .element-item {
+      padding: 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      background: #f9f9f9;
+    }
+
+    .element-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .element-type {
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+
+    .element-controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .element-controls button {
+      background: white;
+      border: 1px solid #e0e0e0;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .element-controls button:hover {
+      background: #f0f0f0;
+    }
+
+    .element-content {
+      font-size: 14px;
+      color: #37352f;
+      margin-bottom: 8px;
+    }
+
+    .element-field-label {
+      font-size: 12px;
+      color: #999;
+      margin-top: 4px;
+    }
+
+    .field-label-input {
+      width: 100%;
+      padding: 6px 8px;
+      font-size: 13px;
+      border: 1px solid #e0e0e0;
+      border-radius: 3px;
+      margin-top: 8px;
+    }
+
+    .add-section {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 16px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+    }
+
+    .add-section-fields {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .add-element-btn {
+      padding: 10px 16px;
+      background: #2383e2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .add-element-btn:hover {
+      background: #1a6bb8;
+    }
+
+    .element-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .field {
+      margin-bottom: 20px;
+    }
+
+    .field.checkbox-field {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .field.checkbox-field label {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #37352f;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      background: #ffffff;
+      color: #37352f;
+      transition: border-color 0.2s;
+    }
+
+    input.error,
+    select.error {
+      border-color: #d32f2f;
+    }
+
+    .error-message {
+      color: #d32f2f;
+      font-size: 12px;
+      margin-top: 4px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: #2383e2;
+    }
+
+    input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+    }
+
+    input[type="date"] {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      background: #ffffff;
+      color: #37352f;
+      transition: border-color 0.2s;
+    }
+
+    select[multiple] {
+      min-height: 120px;
+      padding: 8px;
+    }
+
+    select[multiple] option {
+      padding: 6px 8px;
+      border-radius: 3px;
+      margin: 2px 0;
+    }
+
+    select[multiple] option:checked {
+      background: #2383e2;
+      color: white;
+    }
+
+    .btn {
+      background: #2383e2;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 10px;
+      width: 100%;
+    }
+
+    .btn:hover {
+      background: #1a6bb8;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .separator {
+      height: 1px;
+      background: #e0e0e0;
+      margin: 24px 0;
+    }
+
+    .custom-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 20px 0 12px 0;
+      color: #37352f;
+    }
+
+    .custom-text {
+      font-size: 14px;
+      color: #666;
+      margin: 12px 0;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="modal" id="configModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Configuration du formulaire</h2>
+        <button class="close-btn" id="closeModal">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <div id="allElements"></div>
+      </div>
+      
+      <div class="add-section">
+        <div class="add-section-fields">
+          <select id="elementType" class="element-input">
+            <option value="">-- Type d'élément --</option>
+            <option value="separator">Séparateur</option>
+            <option value="title">Titre</option>
+            <option value="text">Texte</option>
+          </select>
+          
+          <input type="text" id="elementContent" class="element-input" placeholder="Contenu (titre ou texte)" style="display: none;">
+        </div>
+        <button class="add-element-btn" id="addElementBtn">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="fields"></div>
+    <button class="btn" id="addBtn">Ajouter</button>
+  </div>
+
+  <script>
+    // Configuration avec onEditOptions
+    grist.ready({ 
+      requiredAccess: 'full',
+      onEditOptions: function() {
+        configModal.classList.add('show');
+      }
+    });
+
+    const fieldsContainer = document.getElementById('fields');
+    const addButton = document.getElementById('addBtn');
+    const configModal = document.getElementById('configModal');
+    const closeModal = document.getElementById('closeModal');
+    const elementType = document.getElementById('elementType');
+    const elementContent = document.getElementById('elementContent');
+    const addElementBtn = document.getElementById('addElementBtn');
+    const allElementsContainer = document.getElementById('allElements');
+    
+    let columns = [];
+    let columnMetadata = {};
+    let formElements = []; // Tous les éléments (champs + custom)
+
+    // Charger la configuration
+    async function loadConfiguration() {
+      try {
+        const options = await grist.getOptions();
+        formElements = options.formElements || [];
+        
+        // Si c'est la première fois, initialiser avec les colonnes
+        if (formElements.length === 0 && columns.length > 0) {
+          formElements = columns.map(col => ({
+            type: 'field',
+            fieldName: col,
+            fieldLabel: col // Titre par défaut = nom de la colonne
+          }));
+        }
+        
+        renderConfigList();
+        renderForm();
+      } catch (e) {
+        console.error('Erreur chargement config:', e);
+      }
+    }
+
+    // Sauvegarder la configuration
+    async function saveConfiguration() {
+      try {
+        await grist.setOption('formElements', formElements);
+      } catch (e) {
+        console.error('Erreur sauvegarde config:', e);
+      }
+    }
+
+    // Afficher la liste complète dans le modal
+    function renderConfigList() {
+      allElementsContainer.innerHTML = '';
+      
+      formElements.forEach((element, index) => {
+        const div = document.createElement('div');
+        div.className = 'element-item';
+        
+        const header = document.createElement('div');
+        header.className = 'element-header';
+        
+        const type = document.createElement('div');
+        type.className = 'element-type';
+        
+        if (element.type === 'field') {
+          type.textContent = 'CHAMP';
+        } else if (element.type === 'separator') {
+          type.textContent = 'SÉPARATEUR';
+        } else if (element.type === 'title') {
+          type.textContent = 'TITRE';
+        } else if (element.type === 'text') {
+          type.textContent = 'TEXTE';
+        }
+        
+        const controls = document.createElement('div');
+        controls.className = 'element-controls';
+        
+        if (index > 0) {
+          const upBtn = document.createElement('button');
+          upBtn.textContent = '↑';
+          upBtn.onclick = () => moveElement(index, -1);
+          controls.appendChild(upBtn);
+        }
+        
+        if (index < formElements.length - 1) {
+          const downBtn = document.createElement('button');
+          downBtn.textContent = '↓';
+          downBtn.onclick = () => moveElement(index, 1);
+          controls.appendChild(downBtn);
+        }
+        
+        // Ne permettre la suppression que des éléments custom
+        if (element.type !== 'field') {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = '🗑️';
+          deleteBtn.onclick = () => deleteElement(index);
+          controls.appendChild(deleteBtn);
+        }
+        
+        header.appendChild(type);
+        header.appendChild(controls);
+        div.appendChild(header);
+        
+        // Afficher le contenu
+        const content = document.createElement('div');
+        content.className = 'element-content';
+        
+        if (element.type === 'field') {
+          content.textContent = `Colonne : ${element.fieldName}`;
+          
+          // Ajouter champ pour modifier le titre
+          const labelDiv = document.createElement('div');
+          labelDiv.className = 'element-field-label';
+          labelDiv.textContent = 'Titre du champ :';
+          
+          const labelInput = document.createElement('input');
+          labelInput.type = 'text';
+          labelInput.className = 'field-label-input';
+          labelInput.value = element.fieldLabel || element.fieldName;
+          labelInput.placeholder = 'Titre affiché dans le formulaire';
+          labelInput.onchange = (e) => {
+            element.fieldLabel = e.target.value;
+            saveConfiguration();
+            renderForm();
+          };
+          
+          div.appendChild(content);
+          div.appendChild(labelDiv);
+          div.appendChild(labelInput);
+        } else if (element.type !== 'separator') {
+          content.textContent = element.content;
+          div.appendChild(content);
+        }
+        
+        allElementsContainer.appendChild(div);
+      });
+    }
+
+    // Déplacer un élément
+    function moveElement(index, direction) {
+      const newIndex = index + direction;
+      if (newIndex >= 0 && newIndex < formElements.length) {
+        [formElements[index], formElements[newIndex]] = 
+        [formElements[newIndex], formElements[index]];
+        saveConfiguration();
+        renderConfigList();
+        renderForm();
+      }
+    }
+
+    // Supprimer un élément
+    function deleteElement(index) {
+      formElements.splice(index, 1);
+      saveConfiguration();
+      renderConfigList();
+      renderForm();
+    }
+
+    // Gérer l'affichage du champ de contenu
+    elementType.addEventListener('change', () => {
+      if (elementType.value === 'separator') {
+        elementContent.style.display = 'none';
+      } else if (elementType.value) {
+        elementContent.style.display = 'block';
+        elementContent.placeholder = elementType.value === 'title' ? 'Titre' : 'Texte';
+      }
+    });
+
+    // Ajouter un élément personnalisé
+    addElementBtn.addEventListener('click', () => {
+      const type = elementType.value;
+      if (!type) return;
+      
+      const content = elementContent.value.trim();
+      if (type !== 'separator' && !content) {
+        alert('Veuillez saisir un contenu');
+        return;
+      }
+      
+      formElements.push({ type, content });
+      saveConfiguration();
+      renderConfigList();
+      renderForm();
+      
+      elementType.value = '';
+      elementContent.value = '';
+      elementContent.style.display = 'none';
+    });
+
+    // Fermer le modal
+    closeModal.addEventListener('click', () => {
+      configModal.classList.remove('show');
+    });
+
+    configModal.addEventListener('click', (e) => {
+      if (e.target === configModal) {
+        configModal.classList.remove('show');
+      }
+    });
+
+    // Récupérer les métadonnées des colonnes et des références
+    async function getColumnMetadata() {
+      try {
+        const table = await grist.getTable();
+        const currentTableId = await table._platform.getTableId();
+        
+        const docInfo = await grist.docApi.fetchTable('_grist_Tables_column');
+        const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
+        const metadata = {};
+        
+        const tableMap = {};
+        tablesInfo.tableId.forEach((tableId, index) => {
+          tableMap[tablesInfo.id[index]] = tableId;
+        });
+        
+        const currentTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentTableId)];
+        
+        for (let i = 0; i < docInfo.colId.length; i++) {
+          const colId = docInfo.colId[i];
+          const parentTableId = docInfo.parentId[i];
+          
+          if (parentTableId !== currentTableNumericId) {
+            continue;
+          }
+          
+          const type = docInfo.type[i];
+          const widgetOptions = docInfo.widgetOptions?.[i];
+          
+          let choices = null;
+          let isMultiple = false;
+          let refTable = null;
+          let refChoices = [];
+          
+          if (widgetOptions) {
+            try {
+              const options = JSON.parse(widgetOptions);
+              if (options.choices) {
+                choices = options.choices;
+              }
+            } catch (e) {}
+          }
+          
+          if (type.startsWith('Ref:')) {
+            refTable = type.substring(4);
+            isMultiple = false;
+          } else if (type.startsWith('RefList:')) {
+            refTable = type.substring(8);
+            isMultiple = true;
+          }
+          
+          if (refTable) {
+            try {
+              const refData = await grist.docApi.fetchTable(refTable);
+              refChoices = refData.id.map((id, idx) => ({
+                id: id,
+                label: refData[Object.keys(refData).find(k => k !== 'id' && k !== 'manualSort')]?.[idx] || id
+              }));
+            } catch (e) {
+              console.error(`Erreur récupération table référence ${refTable}:`, e);
+            }
+          }
+          
+          metadata[colId] = {
+            type: type,
+            choices: choices,
+            isMultiple: type === 'ChoiceList' || type.startsWith('RefList:'),
+            isRef: type.startsWith('Ref:') || type.startsWith('RefList:'),
+            refTable: refTable,
+            refChoices: refChoices,
+            isBool: type === 'Bool',
+            isDate: type === 'Date' || type === 'DateTime',
+            isNumeric: type === 'Numeric',
+            isInt: type === 'Int'
+          };
+        }
+        
+        return metadata;
+      } catch (error) {
+        console.error("Erreur récupération métadonnées:", error);
+        return {};
+      }
+    }
+
+    // Créer un input selon le type de colonne
+    function createInputForColumn(col, meta) {
+      let inputElement;
+      
+      if (meta.isBool) {
+        inputElement = document.createElement('input');
+        inputElement.type = 'checkbox';
+        inputElement.id = `input_${col}`;
+        return inputElement;
+      }
+      
+      if (meta.isDate) {
+        inputElement = document.createElement('input');
+        inputElement.type = 'date';
+        inputElement.id = `input_${col}`;
+        return inputElement;
+      }
+      
+      if (meta.isNumeric || meta.isInt) {
+        inputElement = document.createElement('input');
+        inputElement.type = 'text';
+        inputElement.id = `input_${col}`;
+        inputElement.placeholder = meta.isInt ? 'Entier' : 'Nombre';
+        return inputElement;
+      }
+      
+      if (meta.isMultiple) {
+        const select = document.createElement('select');
+        select.multiple = true;
+        select.id = `input_${col}`;
+        
+        const optionsList = meta.refChoices.length > 0 ? meta.refChoices : (meta.choices || []).map(c => ({ id: c, label: c }));
+        
+        optionsList.forEach(option => {
+          const opt = document.createElement('option');
+          opt.value = option.id;
+          opt.textContent = option.label;
+          select.appendChild(opt);
+        });
+        
+        return select;
+      }
+      
+      if ((meta.choices && meta.choices.length > 0) || (meta.isRef && meta.refChoices.length > 0)) {
+        inputElement = document.createElement('select');
+        inputElement.id = `input_${col}`;
+        
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = '-- Sélectionner --';
+        inputElement.appendChild(emptyOption);
+        
+        const optionsList = meta.refChoices.length > 0 ? meta.refChoices : meta.choices.map(c => ({ id: c, label: c }));
+        optionsList.forEach(option => {
+          const opt = document.createElement('option');
+          opt.value = option.id;
+          opt.textContent = option.label;
+          inputElement.appendChild(opt);
+        });
+        
+        return inputElement;
+      }
+      
+      inputElement = document.createElement('input');
+      inputElement.type = 'text';
+      inputElement.id = `input_${col}`;
+      return inputElement;
+    }
+
+    // Récupérer la valeur d'un input selon son type
+    function getInputValue(col, meta) {
+      const input = document.getElementById(`input_${col}`);
+      
+      if (!input) return null;
+      
+      if (meta.isBool) {
+        return input.checked;
+      }
+      
+      if (meta.isMultiple) {
+        const selectedOptions = Array.from(input.selectedOptions).map(opt => opt.value);
+        const values = meta.isRef ? selectedOptions.map(v => parseInt(v)) : selectedOptions;
+        return ["L", ...values];
+      }
+      
+      if (meta.isRef) {
+        return input.value ? parseInt(input.value) : null;
+      }
+      
+      if (meta.isNumeric || meta.isInt) {
+        return input.value ? parseFloat(input.value) : null;
+      }
+      
+      return input.value;
+    }
+
+    // Valider un champ
+    function validateField(col, meta) {
+      const input = document.getElementById(`input_${col}`);
+      const errorMsg = document.getElementById(`error_${col}`);
+      
+      input.classList.remove('error');
+      if (errorMsg) errorMsg.classList.remove('show');
+      
+      if (meta.isNumeric || meta.isInt) {
+        const value = input.value.trim();
+        
+        if (value === '') {
+          return true;
+        }
+        
+        const numValue = parseFloat(value);
+        
+        if (isNaN(numValue)) {
+          input.classList.add('error');
+          if (errorMsg) {
+            errorMsg.textContent = 'Valeur numérique requise';
+            errorMsg.classList.add('show');
+          }
+          return false;
+        }
+        
+        if (meta.isInt && !Number.isInteger(numValue)) {
+          input.classList.add('error');
+          if (errorMsg) {
+            errorMsg.textContent = 'Valeur entière requise (pas de décimales)';
+            errorMsg.classList.add('show');
+          }
+          return false;
+        }
+      }
+      
+      return true;
+    }
+
+    // Rendre le formulaire selon la configuration
+    function renderForm() {
+      fieldsContainer.innerHTML = '';
+      
+      formElements.forEach(element => {
+        if (element.type === 'separator') {
+          const separator = document.createElement('div');
+          separator.className = 'separator';
+          fieldsContainer.appendChild(separator);
+        } else if (element.type === 'title') {
+          const title = document.createElement('div');
+          title.className = 'custom-title';
+          title.textContent = element.content;
+          fieldsContainer.appendChild(title);
+        } else if (element.type === 'text') {
+          const text = document.createElement('div');
+          text.className = 'custom-text';
+          text.textContent = element.content;
+          fieldsContainer.appendChild(text);
+        } else if (element.type === 'field') {
+          const col = element.fieldName;
+          const meta = columnMetadata[col] || {};
+          
+          const fieldDiv = document.createElement('div');
+          
+          if (meta.isBool) {
+            fieldDiv.className = 'field checkbox-field';
+          } else {
+            fieldDiv.className = 'field';
+          }
+          
+          const label = document.createElement('label');
+          // Utiliser le titre personnalisé ou le nom de colonne par défaut
+          label.textContent = element.fieldLabel || col;
+          
+          const inputElement = createInputForColumn(col, meta);
+          
+          if (meta.isBool) {
+            fieldDiv.appendChild(label);
+            fieldDiv.appendChild(inputElement);
+          } else {
+            fieldDiv.appendChild(label);
+            fieldDiv.appendChild(inputElement);
+            
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'error-message';
+            errorMsg.id = `error_${col}`;
+            fieldDiv.appendChild(errorMsg);
+          }
+          
+          fieldsContainer.appendChild(fieldDiv);
+        }
+      });
+    }
+
+    // Récupérer les colonnes et créer les inputs
+    grist.onRecords(async table => {
+      if (!table || table.length === 0) {
+        return;
+      }
+      
+      columns = Object.keys(table[0]).filter(col => col !== 'id');
+      columnMetadata = await getColumnMetadata();
+      
+      await loadConfiguration();
+    });
+
+    // Au clic sur "Ajouter"
+    addButton.addEventListener('click', async () => {
+      let isValid = true;
+      
+      // Valider uniquement les champs
+      formElements.forEach(element => {
+        if (element.type === 'field') {
+          const col = element.fieldName;
+          const meta = columnMetadata[col] || {};
+          if (!validateField(col, meta)) {
+            isValid = false;
+          }
+        }
+      });
+      
+      if (!isValid) {
+        return;
+      }
+      
+      const fields = {};
+      
+      // Récupérer les valeurs uniquement des champs
+      formElements.forEach(element => {
+        if (element.type === 'field') {
+          const col = element.fieldName;
+          const meta = columnMetadata[col] || {};
+          fields[col] = getInputValue(col, meta);
+        }
+      });
+      
+      try {
+        await grist.selectedTable.create({ fields });
+        
+        // Vider les inputs
+        formElements.forEach(element => {
+          if (element.type === 'field') {
+            const col = element.fieldName;
+            const input = document.getElementById(`input_${col}`);
+            const meta = columnMetadata[col] || {};
+            
+            if (meta.isBool) {
+              input.checked = false;
+            } else if (meta.isMultiple) {
+              Array.from(input.options).forEach(opt => opt.selected = false);
+            } else {
+              input.value = '';
+            }
+          }
+        });
+      } catch (error) {
+        console.error("Erreur lors de la création:", error);
+        alert("Erreur lors de la création: " + error.message);
+      }
+    });
+  </script>
+</body>
+</html>
