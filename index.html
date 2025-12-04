@@ -6,6 +6,18 @@
   <title>Grist Custom Widget</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <style>
+    #fields {
+      background: yellow !important;
+      min-height: 200px !important;
+     border: 3px solid red !important;
+    }
+
+    .field {
+     background: lightblue !important;
+      border: 2px solid blue !important;
+     padding: 10px !important;
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -412,6 +424,9 @@ async function loadConfiguration() {
     console.log('Appel renderForm...');
     renderForm();
     console.log('✅ Configuration chargée et rendue');
+    console.log('fieldsContainer:', fieldsContainer);
+    console.log('fieldsContainer HTML:', fieldsContainer.innerHTML);
+    console.log('fieldsContainer visible?', fieldsContainer.offsetHeight, fieldsContainer.offsetWidth);
   } catch (e) {
     console.error('❌ Erreur chargement config:', e);
   }
