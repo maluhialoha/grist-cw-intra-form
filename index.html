@@ -828,13 +828,24 @@
     }
 
     // Récupérer les colonnes et créer les inputs
-    grist.onRecords(async table => {
-      if (!table || table.length === 0) {
+    grist.onRecords(async (table, mappings) => {
+      console.log('onRecords appelé', { table, mappings });
+      
+      // Récupérer les colonnes depuis mappings si disponible, sinon depuis table
+      if (mappings) {
+        columns = Object.keys(mappings).filter(col => col !== 'id');
+      } else if (table && table.length > 0) {
+        columns = Object.keys(table[0]).filter(col => col !== 'id');
+      } else {
+        // Pas de données, attendre le prochain appel
+        console.log('Pas de colonnes disponibles');
         return;
       }
       
-      columns = Object.keys(table[0]).filter(col => col !== 'id');
+      console.log('Colonnes trouvées:', columns);
+      
       columnMetadata = await getColumnMetadata();
+      console.log('Métadonnées chargées:', columnMetadata);
       
       await loadConfiguration();
     });
