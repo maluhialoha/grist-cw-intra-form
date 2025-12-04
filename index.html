@@ -327,6 +327,9 @@
       </div>
       
       <div class="modal-body">
+        <button class="add-element-btn" id="resetBtn" style="margin-bottom: 20px; width: 100%;">
+          🔄 Réinitialiser avec les colonnes de la table
+        </button>
         <div id="allElements"></div>
       </div>
       
@@ -381,10 +384,26 @@
     const elementContent = document.getElementById('elementContent');
     const addElementBtn = document.getElementById('addElementBtn');
     const allElementsContainer = document.getElementById('allElements');
+    const resetBtn = document.getElementById('resetBtn');
     
     let columns = [];
     let columnMetadata = {};
     let formElements = [];
+
+    // Réinitialiser avec les colonnes
+    resetBtn.addEventListener('click', async () => {
+      if (confirm('Réinitialiser le formulaire avec toutes les colonnes de la table ?')) {
+        formElements = columns.map(col => ({
+          type: 'field',
+          fieldName: col,
+          fieldLabel: col
+        }));
+        await saveConfiguration();
+        renderConfigList();
+        renderForm();
+        alert('Formulaire réinitialisé avec succès !');
+      }
+    });
 
     // Charger la configuration
     async function loadConfiguration() {
@@ -397,6 +416,33 @@
         formElements = options.formElements || [];
         console.log('formElements:', formElements);
         
+        // Vérifier quelles colonnes sont déjà dans formElements
+        const existingFields = formElements
+          .filter(el => el.type === 'field')
+          .map(el => el.fieldName);
+        
+        console.log('Champs existants:', existingFields);
+        
+        // Ajouter les colonnes manquantes
+        const missingColumns = columns.filter(col => !existingFields.includes(col));
+        console.log('Colonnes manquantes:', missingColumns);
+        
+        if (missingColumns.length > 0) {
+          // Ajouter les colonnes manquantes au début
+          const newFields = missingColumns.map(col => ({
+            type: 'field',
+            fieldName: col,
+            fieldLabel: col
+          }));
+          
+          formElements = [...newFields, ...formElements];
+          console.log('✅ Colonnes manquantes ajoutées au début');
+          
+          // Sauvegarder automatiquement
+          await saveConfiguration();
+        }
+        
+        // Si toujours vide (première utilisation), initialiser avec les colonnes
         if (formElements.length === 0 && columns.length > 0) {
           formElements = columns.map(col => ({
             type: 'field',
