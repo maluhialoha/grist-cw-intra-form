@@ -6,316 +6,56 @@
   <title>Grist Custom Widget</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      background: #ffffff;
-      padding: 24px;
-      color: #37352f;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      position: relative;
-    }
-
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: white;
-      z-index: 2000;
-    }
-
-    .modal.show {
-      display: block;
-    }
-
-    .modal-content {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      padding: 24px;
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid #e0e0e0;
-    }
-
-    .modal-header h2 {
-      font-size: 20px;
-      font-weight: 600;
-    }
-
-    .close-btn {
-      background: none;
-      border: none;
-      font-size: 28px;
-      cursor: pointer;
-      color: #999;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .close-btn:hover {
-      background: #f0f0f0;
-      border-radius: 4px;
-    }
-
-    .modal-body {
-      flex: 1;
-      overflow-y: auto;
-      margin-bottom: 24px;
-    }
-
-    .element-item {
-      padding: 12px;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      margin-bottom: 12px;
-      background: #f9f9f9;
-    }
-
-    .element-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-
-    .element-type {
-      font-size: 12px;
-      color: #666;
-      font-weight: 500;
-      text-transform: uppercase;
-    }
-
-    .element-controls {
-      display: flex;
-      gap: 8px;
-    }
-
-    .element-controls button {
-      background: white;
-      border: 1px solid #e0e0e0;
-      cursor: pointer;
-      font-size: 16px;
-      padding: 4px 8px;
-      border-radius: 4px;
-    }
-
-    .element-controls button:hover {
-      background: #f0f0f0;
-    }
-
-    .element-content {
-      font-size: 14px;
-      color: #37352f;
-      margin-bottom: 8px;
-    }
-
-    .element-field-label {
-      font-size: 12px;
-      color: #999;
-      margin-top: 4px;
-    }
-
-    .field-label-input {
-      width: 100%;
-      padding: 6px 8px;
-      font-size: 13px;
-      border: 1px solid #e0e0e0;
-      border-radius: 3px;
-      margin-top: 8px;
-    }
-
-    .add-section {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-      padding: 16px;
-      background: #f9f9f9;
-      border-radius: 4px;
-      border: 1px solid #e0e0e0;
-    }
-
-    .add-section-fields {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .add-element-btn {
-      padding: 10px 16px;
-      background: #2383e2;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    .add-element-btn:hover {
-      background: #1a6bb8;
-    }
-
-    .element-input {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      font-size: 14px;
-    }
-
-    .field {
-      margin-bottom: 20px;
-    }
-
-    .field.checkbox-field {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .field.checkbox-field label {
-      margin-bottom: 0;
-    }
-
-    label {
-      display: block;
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 8px;
-      color: #37352f;
-    }
-
-    input,
-    select {
-      width: 100%;
-      padding: 10px 12px;
-      font-size: 14px;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      background: #ffffff;
-      color: #37352f;
-      transition: border-color 0.2s;
-    }
-
-    input.error,
-    select.error {
-      border-color: #d32f2f;
-    }
-
-    .error-message {
-      color: #d32f2f;
-      font-size: 12px;
-      margin-top: 4px;
-      display: none;
-    }
-
-    .error-message.show {
-      display: block;
-    }
-
-    input:focus,
-    select:focus {
-      outline: none;
-      border-color: #2383e2;
-    }
-
-    input[type="checkbox"] {
-      width: auto;
-      margin: 0;
-    }
-
-    input[type="date"] {
-      width: 100%;
-      padding: 10px 12px;
-      font-size: 14px;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      background: #ffffff;
-      color: #37352f;
-      transition: border-color 0.2s;
-    }
-
-    select[multiple] {
-      min-height: 120px;
-      padding: 8px;
-    }
-
-    select[multiple] option {
-      padding: 6px 8px;
-      border-radius: 3px;
-      margin: 2px 0;
-    }
-
-    select[multiple] option:checked {
-      background: #2383e2;
-      color: white;
-    }
-
-    .btn {
-      background: #2383e2;
-      color: white;
-      border: none;
-      padding: 12px 20px;
-      font-size: 14px;
-      font-weight: 500;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.2s;
-      margin-top: 10px;
-      width: 100%;
-    }
-
-    .btn:hover {
-      background: #1a6bb8;
-    }
-
-    .btn:active {
-      transform: translateY(1px);
-    }
-
-    .separator {
-      height: 1px;
-      background: #e0e0e0;
-      margin: 24px 0;
-    }
-
-    .custom-title {
-      font-size: 18px;
-      font-weight: 600;
-      margin: 20px 0 12px 0;
-      color: #37352f;
-    }
-
-    .custom-text {
-      font-size: 14px;
-      color: #666;
-      margin: 12px 0;
-      line-height: 1.5;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; background: #fff; padding: 24px; color: #37352f; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 2000; }
+    .modal.show { display: block; }
+    .modal-content { height: 100%; display: flex; flex-direction: column; padding: 16px; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e0e0e0; }
+    .modal-header h2 { font-size: 16px; font-weight: 600; }
+    .close-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+    .close-btn:hover { background: #f0f0f0; border-radius: 4px; }
+    .modal-body { flex: 1; overflow-y: auto; margin-bottom: 16px; }
+    .element-item { padding: 12px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; background: #f9f9f9; display: flex; align-items: center; gap: 12px; cursor: move; }
+    .element-item.dragging { opacity: 0.5; }
+    .drag-handle { cursor: grab; color: #999; font-size: 20px; user-select: none; flex-shrink: 0; }
+    .drag-handle:active { cursor: grabbing; }
+    .element-content-wrapper { flex: 1; min-width: 0; }
+    .element-preview { font-size: 14px; color: #37352f; margin-bottom: 8px; }
+    .element-preview.separator { height: 1px; background: #e0e0e0; margin: 8px 0; }
+    .element-preview.title { font-size: 16px; font-weight: 600; }
+    .element-preview.text { font-size: 14px; color: #666; }
+    .element-preview.field { font-size: 13px; color: #666; }
+    .element-field-label { font-size: 12px; color: #999; margin-top: 4px; }
+    .field-label-input { width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #e0e0e0; border-radius: 3px; margin-top: 8px; }
+    .element-controls { display: flex; gap: 8px; flex-shrink: 0; }
+    .element-controls button { background: white; border: 1px solid #e0e0e0; cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 4px; }
+    .element-controls button:hover { background: #f0f0f0; }
+    .add-section { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #f9f9f9; border-radius: 4px; border: 1px solid #e0e0e0; }
+    .add-section-fields { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .add-element-btn { padding: 10px 16px; background: #2383e2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .add-element-btn:hover { background: #1a6bb8; }
+    .element-input { width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 14px; }
+    .field { margin-bottom: 20px; }
+    .field.checkbox-field { display: flex; align-items: center; gap: 12px; }
+    .field.checkbox-field label { margin-bottom: 0; }
+    label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #37352f; }
+    input, select { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #e0e0e0; border-radius: 4px; background: #fff; color: #37352f; transition: border-color 0.2s; }
+    input.error, select.error { border-color: #d32f2f; }
+    .error-message { color: #d32f2f; font-size: 12px; margin-top: 4px; display: none; }
+    .error-message.show { display: block; }
+    input:focus, select:focus { outline: none; border-color: #2383e2; }
+    input[type="checkbox"] { width: auto; margin: 0; }
+    select[multiple] { min-height: 120px; padding: 8px; }
+    select[multiple] option { padding: 6px 8px; border-radius: 3px; margin: 2px 0; }
+    select[multiple] option:checked { background: #2383e2; color: white; }
+    .btn { background: #2383e2; color: white; border: none; padding: 12px 20px; font-size: 14px; font-weight: 500; border-radius: 4px; cursor: pointer; transition: background 0.2s; margin-top: 10px; width: 100%; }
+    .btn:hover { background: #1a6bb8; }
+    .btn:active { transform: translateY(1px); }
+    .separator { height: 1px; background: #e0e0e0; margin: 24px 0; }
+    .custom-title { font-size: 18px; font-weight: 600; margin: 20px 0 12px 0; color: #37352f; }
+    .custom-text { font-size: 14px; color: #666; margin: 12px 0; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -325,677 +65,565 @@
         <h2>Configuration du formulaire</h2>
         <button class="close-btn" id="closeModal">&times;</button>
       </div>
-      
       <div class="modal-body">
-        <button class="add-element-btn" id="resetBtn" style="margin-bottom: 20px; width: 100%;">
-          🔄 Réinitialiser avec les colonnes de la table
-        </button>
         <div id="allElements"></div>
       </div>
-      
       <div class="add-section">
         <div class="add-section-fields">
           <select id="elementType" class="element-input">
             <option value="">-- Type d'élément --</option>
+            <option value="column">Colonne</option>
             <option value="separator">Séparateur</option>
             <option value="title">Titre</option>
             <option value="text">Texte</option>
           </select>
-          
-          <input type="text" id="elementContent" class="element-input" placeholder="Contenu (titre ou texte)" style="display: none;">
+          <select id="columnSelect" class="element-input" style="display: none;"></select>
+          <input type="text" id="elementContent" class="element-input" style="display: none;">
         </div>
         <button class="add-element-btn" id="addElementBtn">Ajouter</button>
       </div>
     </div>
   </div>
-
   <div class="container">
     <div id="fields"></div>
-    <button class="btn" id="addBtn">Ajouter</button>
+    <button class="btn" id="addBtn">Valider</button>
   </div>
+  <script src="script.js">
 
-  <script>
-    // Attendre que le DOM soit complètement chargé
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initGrist);
-    } else {
-      initGrist();
-    }
+  document.addEventListener('DOMContentLoaded', initGrist);
+} else {
+  initGrist();
+}
 
-    function initGrist() {
-      console.log('Initialisation Grist...');
-      
-      // Configuration avec onEditOptions
-      grist.ready({ 
-        requiredAccess: 'full',
-        onEditOptions: function() {
-          configModal.classList.add('show');
-        }
-      });
-      
-      console.log('Grist ready appelé');
-    }
+function initGrist() {
+  grist.ready({ 
+    requiredAccess: 'full',
+    onEditOptions: () => configModal.classList.add('show')
+  });
+}
 
-    const fieldsContainer = document.getElementById('fields');
-    const addButton = document.getElementById('addBtn');
-    const configModal = document.getElementById('configModal');
-    const closeModal = document.getElementById('closeModal');
-    const elementType = document.getElementById('elementType');
-    const elementContent = document.getElementById('elementContent');
-    const addElementBtn = document.getElementById('addElementBtn');
-    const allElementsContainer = document.getElementById('allElements');
-    const resetBtn = document.getElementById('resetBtn');
+const fieldsContainer = document.getElementById('fields');
+const addButton = document.getElementById('addBtn');
+const configModal = document.getElementById('configModal');
+const closeModal = document.getElementById('closeModal');
+const elementType = document.getElementById('elementType');
+const columnSelect = document.getElementById('columnSelect');
+const elementContent = document.getElementById('elementContent');
+const addElementBtn = document.getElementById('addElementBtn');
+const allElementsContainer = document.getElementById('allElements');
+
+let columns = [];
+let columnMetadata = {};
+let formElements = [];
+let draggedElement = null;
+
+async function loadConfiguration() {
+  try {
+    const options = await grist.getOptions();
+    formElements = options.formElements || [];
     
-    let columns = [];
-    let columnMetadata = {};
-    let formElements = [];
+    const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
+    const missingColumns = columns.filter(col => !existingFields.includes(col));
+    
+    if (missingColumns.length > 0) {
+      formElements = [...missingColumns.map(col => ({ type: 'field', fieldName: col, fieldLabel: col })), ...formElements];
+      await saveConfiguration();
+    }
+    
+    if (formElements.length === 0 && columns.length > 0) {
+      formElements = columns.map(col => ({ type: 'field', fieldName: col, fieldLabel: col }));
+    }
+    
+    renderConfigList();
+    renderForm();
+  } catch (e) {
+    console.error('Erreur:', e);
+  }
+}
 
-    // Réinitialiser avec les colonnes
-    resetBtn.addEventListener('click', async () => {
-      if (confirm('Réinitialiser le formulaire avec toutes les colonnes de la table ?')) {
-        formElements = columns.map(col => ({
-          type: 'field',
-          fieldName: col,
-          fieldLabel: col
-        }));
-        await saveConfiguration();
-        renderConfigList();
-        renderForm();
-        alert('Formulaire réinitialisé avec succès !');
-      }
+async function saveConfiguration() {
+  try {
+    await grist.setOption('formElements', formElements);
+  } catch (e) {
+    console.error('Erreur:', e);
+  }
+}
+
+function updateColumnSelect() {
+  const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
+  const availableColumns = columns.filter(col => !existingFields.includes(col));
+  
+  columnSelect.innerHTML = '';
+  
+  if (availableColumns.length === 0) {
+    const opt = document.createElement('option');
+    opt.textContent = 'Toutes les colonnes sont déjà dans le formulaire';
+    opt.disabled = true;
+    columnSelect.appendChild(opt);
+  } else {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '-- Sélectionner une colonne --';
+    columnSelect.appendChild(opt);
+    
+    availableColumns.forEach(col => {
+      const opt = document.createElement('option');
+      opt.value = col;
+      opt.textContent = col;
+      columnSelect.appendChild(opt);
     });
+  }
+}
 
-    // Charger la configuration
-    async function loadConfiguration() {
-      console.log('📋 Début loadConfiguration');
-      try {
-        console.log('Colonnes disponibles:', columns);
-        const options = await grist.getOptions();
-        console.log('Options récupérées:', options);
-        
-        formElements = options.formElements || [];
-        console.log('formElements:', formElements);
-        
-        // Vérifier quelles colonnes sont déjà dans formElements
-        const existingFields = formElements
-          .filter(el => el.type === 'field')
-          .map(el => el.fieldName);
-        
-        console.log('Champs existants:', existingFields);
-        
-        // Ajouter les colonnes manquantes
-        const missingColumns = columns.filter(col => !existingFields.includes(col));
-        console.log('Colonnes manquantes:', missingColumns);
-        
-        if (missingColumns.length > 0) {
-          // Ajouter les colonnes manquantes au début
-          const newFields = missingColumns.map(col => ({
-            type: 'field',
-            fieldName: col,
-            fieldLabel: col
-          }));
-          
-          formElements = [...newFields, ...formElements];
-          console.log('✅ Colonnes manquantes ajoutées au début');
-          
-          // Sauvegarder automatiquement
-          await saveConfiguration();
-        }
-        
-        // Si toujours vide (première utilisation), initialiser avec les colonnes
-        if (formElements.length === 0 && columns.length > 0) {
-          formElements = columns.map(col => ({
-            type: 'field',
-            fieldName: col,
-            fieldLabel: col
-          }));
-          console.log('✅ formElements initialisés avec les colonnes');
-        }
-        
-        console.log('Appel renderConfigList...');
-        renderConfigList();
-        console.log('Appel renderForm...');
-        renderForm();
-        console.log('✅ Configuration chargée et rendue');
-      } catch (e) {
-        console.error('❌ Erreur chargement config:', e);
-      }
-    }
-
-    async function saveConfiguration() {
-      try {
-        await grist.setOption('formElements', formElements);
-      } catch (e) {
-        console.error('Erreur sauvegarde config:', e);
-      }
-    }
-
-    function renderConfigList() {
-      allElementsContainer.innerHTML = '';
+function renderConfigList() {
+  allElementsContainer.innerHTML = '';
+  
+  formElements.forEach((element, index) => {
+    const div = document.createElement('div');
+    div.className = 'element-item';
+    div.draggable = true;
+    div.dataset.index = index;
+    
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    dragHandle.innerHTML = '⋮⋮';
+    
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'element-content-wrapper';
+    
+    const preview = document.createElement('div');
+    preview.className = 'element-preview';
+    
+    if (element.type === 'field') {
+      preview.className = 'element-preview field';
+      preview.textContent = `Colonne : ${element.fieldName}`;
       
-      formElements.forEach((element, index) => {
-        const div = document.createElement('div');
-        div.className = 'element-item';
-        
-        const header = document.createElement('div');
-        header.className = 'element-header';
-        
-        const type = document.createElement('div');
-        type.className = 'element-type';
-        
-        if (element.type === 'field') {
-          type.textContent = 'CHAMP';
-        } else if (element.type === 'separator') {
-          type.textContent = 'SÉPARATEUR';
-        } else if (element.type === 'title') {
-          type.textContent = 'TITRE';
-        } else if (element.type === 'text') {
-          type.textContent = 'TEXTE';
-        }
-        
-        const controls = document.createElement('div');
-        controls.className = 'element-controls';
-        
-        if (index > 0) {
-          const upBtn = document.createElement('button');
-          upBtn.textContent = '↑';
-          upBtn.onclick = () => moveElement(index, -1);
-          controls.appendChild(upBtn);
-        }
-        
-        if (index < formElements.length - 1) {
-          const downBtn = document.createElement('button');
-          downBtn.textContent = '↓';
-          downBtn.onclick = () => moveElement(index, 1);
-          controls.appendChild(downBtn);
-        }
-        
-        if (element.type !== 'field') {
-          const deleteBtn = document.createElement('button');
-          deleteBtn.textContent = '🗑️';
-          deleteBtn.onclick = () => deleteElement(index);
-          controls.appendChild(deleteBtn);
-        }
-        
-        header.appendChild(type);
-        header.appendChild(controls);
-        div.appendChild(header);
-        
-        const content = document.createElement('div');
-        content.className = 'element-content';
-        
-        if (element.type === 'field') {
-          content.textContent = `Colonne : ${element.fieldName}`;
-          
-          const labelDiv = document.createElement('div');
-          labelDiv.className = 'element-field-label';
-          labelDiv.textContent = 'Titre du champ :';
-          
-          const labelInput = document.createElement('input');
-          labelInput.type = 'text';
-          labelInput.className = 'field-label-input';
-          labelInput.value = element.fieldLabel || element.fieldName;
-          labelInput.placeholder = 'Titre affiché dans le formulaire';
-          labelInput.onchange = (e) => {
-            element.fieldLabel = e.target.value;
-            saveConfiguration();
-            renderForm();
-          };
-          
-          div.appendChild(content);
-          div.appendChild(labelDiv);
-          div.appendChild(labelInput);
-        } else if (element.type !== 'separator') {
-          content.textContent = element.content;
-          div.appendChild(content);
-        }
-        
-        allElementsContainer.appendChild(div);
-      });
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'element-field-label';
+      labelDiv.textContent = 'Titre du champ :';
+      
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.className = 'field-label-input';
+      labelInput.value = element.fieldLabel || element.fieldName;
+      labelInput.onchange = (e) => {
+        element.fieldLabel = e.target.value;
+        saveConfiguration();
+        renderForm();
+      };
+      
+      contentWrapper.appendChild(preview);
+      contentWrapper.appendChild(labelDiv);
+      contentWrapper.appendChild(labelInput);
+    } else if (element.type === 'separator') {
+      preview.className = 'element-preview separator';
+      contentWrapper.appendChild(preview);
+    } else if (element.type === 'title') {
+      preview.className = 'element-preview title';
+      preview.textContent = element.content;
+      contentWrapper.appendChild(preview);
+    } else if (element.type === 'text') {
+      preview.className = 'element-preview text';
+      preview.textContent = element.content;
+      contentWrapper.appendChild(preview);
     }
-
-    function moveElement(index, direction) {
-      const newIndex = index + direction;
-      if (newIndex >= 0 && newIndex < formElements.length) {
-        [formElements[index], formElements[newIndex]] = 
-        [formElements[newIndex], formElements[index]];
+    
+    const controls = document.createElement('div');
+    controls.className = 'element-controls';
+    
+    if (element.type !== 'field') {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.onclick = () => {
+        formElements.splice(index, 1);
+        saveConfiguration();
+        renderConfigList();
+        renderForm();
+        updateColumnSelect();
+      };
+      controls.appendChild(deleteBtn);
+    }
+    
+    div.appendChild(dragHandle);
+    div.appendChild(contentWrapper);
+    div.appendChild(controls);
+    
+    div.addEventListener('dragstart', function(e) {
+      draggedElement = this;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    
+    div.addEventListener('dragend', function() {
+      this.classList.remove('dragging');
+      draggedElement = null;
+    });
+    
+    div.addEventListener('dragover', function(e) {
+      if (e.preventDefault) e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      return false;
+    });
+    
+    div.addEventListener('drop', function(e) {
+      if (e.stopPropagation) e.stopPropagation();
+      
+      if (draggedElement !== this) {
+        const draggedIndex = parseInt(draggedElement.dataset.index);
+        const targetIndex = parseInt(this.dataset.index);
+        
+        const temp = formElements[draggedIndex];
+        formElements.splice(draggedIndex, 1);
+        formElements.splice(targetIndex, 0, temp);
+        
         saveConfiguration();
         renderConfigList();
         renderForm();
       }
-    }
-
-    function deleteElement(index) {
-      formElements.splice(index, 1);
-      saveConfiguration();
-      renderConfigList();
-      renderForm();
-    }
-
-    elementType.addEventListener('change', () => {
-      if (elementType.value === 'separator') {
-        elementContent.style.display = 'none';
-      } else if (elementType.value) {
-        elementContent.style.display = 'block';
-        elementContent.placeholder = elementType.value === 'title' ? 'Titre' : 'Texte';
-      }
-    });
-
-    addElementBtn.addEventListener('click', () => {
-      const type = elementType.value;
-      if (!type) return;
       
-      const content = elementContent.value.trim();
-      if (type !== 'separator' && !content) {
-        alert('Veuillez saisir un contenu');
-        return;
-      }
-      
-      formElements.push({ type, content });
-      saveConfiguration();
-      renderConfigList();
-      renderForm();
-      
-      elementType.value = '';
-      elementContent.value = '';
-      elementContent.style.display = 'none';
+      return false;
     });
+    
+    allElementsContainer.appendChild(div);
+  });
+}
 
-    closeModal.addEventListener('click', () => {
-      configModal.classList.remove('show');
-    });
+elementType.addEventListener('change', () => {
+  columnSelect.style.display = 'none';
+  elementContent.style.display = 'none';
+  
+  if (elementType.value === 'column') {
+    updateColumnSelect();
+    columnSelect.style.display = 'block';
+  } else if (elementType.value === 'separator') {
+    // Rien
+  } else if (elementType.value) {
+    elementContent.style.display = 'block';
+    elementContent.placeholder = elementType.value === 'title' ? 'Titre' : 'Texte';
+  }
+});
 
-    configModal.addEventListener('click', (e) => {
-      if (e.target === configModal) {
-        configModal.classList.remove('show');
-      }
-    });
-
-    async function getColumnMetadata() {
-      console.log('🔍 Début getColumnMetadata');
-      try {
-        console.log('1. Récupération de la table...');
-        const table = await grist.getTable();
-        console.log('2. Table récupérée:', table);
-        
-        console.log('3. Récupération du tableId...');
-        const currentTableId = await table._platform.getTableId();
-        console.log('4. TableId:', currentTableId);
-        
-        console.log('5. Fetch _grist_Tables_column...');
-        const docInfo = await grist.docApi.fetchTable('_grist_Tables_column');
-        console.log('6. docInfo:', docInfo);
-        
-        console.log('7. Fetch _grist_Tables...');
-        const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
-        console.log('8. tablesInfo:', tablesInfo);
-        
-        const metadata = {};
-        
-        const tableMap = {};
-        tablesInfo.tableId.forEach((tableId, index) => {
-          tableMap[tablesInfo.id[index]] = tableId;
-        });
-        
-        const currentTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentTableId)];
-        console.log('9. currentTableNumericId:', currentTableNumericId);
-        
-        for (let i = 0; i < docInfo.colId.length; i++) {
-          const colId = docInfo.colId[i];
-          const parentTableId = docInfo.parentId[i];
-          
-          if (parentTableId !== currentTableNumericId) {
-            continue;
-          }
-          
-          const type = docInfo.type[i];
-          const widgetOptions = docInfo.widgetOptions?.[i];
-          
-          let choices = null;
-          let isMultiple = false;
-          let refTable = null;
-          let refChoices = [];
-          
-          if (widgetOptions) {
-            try {
-              const options = JSON.parse(widgetOptions);
-              if (options.choices) {
-                choices = options.choices;
-              }
-            } catch (e) {}
-          }
-          
-          if (type.startsWith('Ref:')) {
-            refTable = type.substring(4);
-            isMultiple = false;
-          } else if (type.startsWith('RefList:')) {
-            refTable = type.substring(8);
-            isMultiple = true;
-          }
-          
-          if (refTable) {
-            try {
-              const refData = await grist.docApi.fetchTable(refTable);
-              refChoices = refData.id.map((id, idx) => ({
-                id: id,
-                label: refData[Object.keys(refData).find(k => k !== 'id' && k !== 'manualSort')]?.[idx] || id
-              }));
-            } catch (e) {
-              console.error(`Erreur récupération table référence ${refTable}:`, e);
-            }
-          }
-          
-          metadata[colId] = {
-            type: type,
-            choices: choices,
-            isMultiple: type === 'ChoiceList' || type.startsWith('RefList:'),
-            isRef: type.startsWith('Ref:') || type.startsWith('RefList:'),
-            refTable: refTable,
-            refChoices: refChoices,
-            isBool: type === 'Bool',
-            isDate: type === 'Date' || type === 'DateTime',
-            isNumeric: type === 'Numeric',
-            isInt: type === 'Int'
-          };
-        }
-        
-        console.log('✅ Métadonnées récupérées avec succès:', metadata);
-        return metadata;
-      } catch (error) {
-        console.error("❌ Erreur récupération métadonnées:", error);
-        console.error("Stack:", error.stack);
-        return {};
-      }
+addElementBtn.addEventListener('click', () => {
+  const type = elementType.value;
+  if (!type) return;
+  
+  if (type === 'column') {
+    const col = columnSelect.value;
+    if (!col) {
+      alert('Veuillez sélectionner une colonne');
+      return;
     }
+    formElements.push({ type: 'field', fieldName: col, fieldLabel: col });
+  } else if (type === 'separator') {
+    formElements.push({ type: 'separator', content: '' });
+  } else {
+    const content = elementContent.value.trim();
+    if (!content) {
+      alert('Veuillez saisir un contenu');
+      return;
+    }
+    formElements.push({ type, content });
+  }
+  
+  saveConfiguration();
+  renderConfigList();
+  renderForm();
+  
+  elementType.value = '';
+  columnSelect.value = '';
+  elementContent.value = '';
+  columnSelect.style.display = 'none';
+  elementContent.style.display = 'none';
+});
 
-    function createInputForColumn(col, meta) {
-      let inputElement;
+closeModal.addEventListener('click', () => configModal.classList.remove('show'));
+configModal.addEventListener('click', (e) => {
+  if (e.target === configModal) configModal.classList.remove('show');
+});
+
+async function getColumnMetadata() {
+  try {
+    const table = await grist.getTable();
+    const currentTableId = await table._platform.getTableId();
+    const docInfo = await grist.docApi.fetchTable('_grist_Tables_column');
+    const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
+    const metadata = {};
+    
+    const currentTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentTableId)];
+    
+    for (let i = 0; i < docInfo.colId.length; i++) {
+      if (docInfo.parentId[i] !== currentTableNumericId) continue;
+      
+      const colId = docInfo.colId[i];
+      const type = docInfo.type[i];
+      let choices = null;
+      let refTable = null;
+      let refChoices = [];
+      
+      if (docInfo.widgetOptions?.[i]) {
+        try {
+          const options = JSON.parse(docInfo.widgetOptions[i]);
+          if (options.choices) choices = options.choices;
+        } catch (e) {}
+      }
+      
+      if (type.startsWith('Ref:')) {
+        refTable = type.substring(4);
+      } else if (type.startsWith('RefList:')) {
+        refTable = type.substring(8);
+      }
+      
+      if (refTable) {
+        try {
+          const refData = await grist.docApi.fetchTable(refTable);
+          refChoices = refData.id.map((id, idx) => ({
+            id: id,
+            label: refData[Object.keys(refData).find(k => k !== 'id' && k !== 'manualSort')]?.[idx] || id
+          }));
+        } catch (e) {}
+      }
+      
+      metadata[colId] = {
+        type,
+        choices,
+        isMultiple: type === 'ChoiceList' || type.startsWith('RefList:'),
+        isRef: type.startsWith('Ref:') || type.startsWith('RefList:'),
+        refTable,
+        refChoices,
+        isBool: type === 'Bool',
+        isDate: type === 'Date' || type === 'DateTime',
+        isNumeric: type === 'Numeric',
+        isInt: type === 'Int'
+      };
+    }
+    
+    return metadata;
+  } catch (error) {
+    console.error("Erreur:", error);
+    return {};
+  }
+}
+
+function createInputForColumn(col, meta) {
+  let inp;
+  
+  if (meta.isBool) {
+    inp = document.createElement('input');
+    inp.type = 'checkbox';
+    inp.id = `input_${col}`;
+    return inp;
+  }
+  
+  if (meta.isDate) {
+    inp = document.createElement('input');
+    inp.type = 'date';
+    inp.id = `input_${col}`;
+    return inp;
+  }
+  
+  if (meta.isNumeric || meta.isInt) {
+    inp = document.createElement('input');
+    inp.type = 'text';
+    inp.id = `input_${col}`;
+    inp.placeholder = meta.isInt ? 'Entier' : 'Nombre';
+    return inp;
+  }
+  
+  if (meta.isMultiple) {
+    const sel = document.createElement('select');
+    sel.multiple = true;
+    sel.id = `input_${col}`;
+    const opts = meta.refChoices.length > 0 ? meta.refChoices : (meta.choices || []).map(c => ({ id: c, label: c }));
+    opts.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.id;
+      o.textContent = opt.label;
+      sel.appendChild(o);
+    });
+    return sel;
+  }
+  
+  if ((meta.choices && meta.choices.length > 0) || (meta.isRef && meta.refChoices.length > 0)) {
+    inp = document.createElement('select');
+    inp.id = `input_${col}`;
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = '-- Sélectionner --';
+    inp.appendChild(empty);
+    const opts = meta.refChoices.length > 0 ? meta.refChoices : meta.choices.map(c => ({ id: c, label: c }));
+    opts.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.id;
+      o.textContent = opt.label;
+      inp.appendChild(o);
+    });
+    return inp;
+  }
+  
+  inp = document.createElement('input');
+  inp.type = 'text';
+  inp.id = `input_${col}`;
+  return inp;
+}
+
+function getInputValue(col, meta) {
+  const inp = document.getElementById(`input_${col}`);
+  if (!inp) return null;
+  
+  if (meta.isBool) return inp.checked;
+  
+  if (meta.isMultiple) {
+    const selected = Array.from(inp.selectedOptions).map(opt => opt.value);
+    const values = meta.isRef ? selected.map(v => parseInt(v)) : selected;
+    return ["L", ...values];
+  }
+  
+  if (meta.isRef) return inp.value ? parseInt(inp.value) : null;
+  if (meta.isNumeric || meta.isInt) return inp.value ? parseFloat(inp.value) : null;
+  
+  return inp.value;
+}
+
+function validateField(col, meta) {
+  const inp = document.getElementById(`input_${col}`);
+  const err = document.getElementById(`error_${col}`);
+  
+  inp.classList.remove('error');
+  if (err) err.classList.remove('show');
+  
+  if (meta.isNumeric || meta.isInt) {
+    const val = inp.value.trim();
+    if (val === '') return true;
+    
+    const num = parseFloat(val);
+    if (isNaN(num)) {
+      inp.classList.add('error');
+      if (err) {
+        err.textContent = 'Valeur numérique requise';
+        err.classList.add('show');
+      }
+      return false;
+    }
+    
+    if (meta.isInt && !Number.isInteger(num)) {
+      inp.classList.add('error');
+      if (err) {
+        err.textContent = 'Valeur entière requise';
+        err.classList.add('show');
+      }
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+function renderForm() {
+  fieldsContainer.innerHTML = '';
+  
+  formElements.forEach(element => {
+    if (element.type === 'separator') {
+      const sep = document.createElement('div');
+      sep.className = 'separator';
+      fieldsContainer.appendChild(sep);
+    } else if (element.type === 'title') {
+      const title = document.createElement('div');
+      title.className = 'custom-title';
+      title.textContent = element.content;
+      fieldsContainer.appendChild(title);
+    } else if (element.type === 'text') {
+      const text = document.createElement('div');
+      text.className = 'custom-text';
+      text.textContent = element.content;
+      fieldsContainer.appendChild(text);
+    } else if (element.type === 'field') {
+      const col = element.fieldName;
+      const meta = columnMetadata[col] || {};
+      
+      const fieldDiv = document.createElement('div');
+      fieldDiv.className = meta.isBool ? 'field checkbox-field' : 'field';
+      
+      const label = document.createElement('label');
+      label.textContent = element.fieldLabel || col;
+      
+      const inp = createInputForColumn(col, meta);
       
       if (meta.isBool) {
-        inputElement = document.createElement('input');
-        inputElement.type = 'checkbox';
-        inputElement.id = `input_${col}`;
-        return inputElement;
-      }
-      
-      if (meta.isDate) {
-        inputElement = document.createElement('input');
-        inputElement.type = 'date';
-        inputElement.id = `input_${col}`;
-        return inputElement;
-      }
-      
-      if (meta.isNumeric || meta.isInt) {
-        inputElement = document.createElement('input');
-        inputElement.type = 'text';
-        inputElement.id = `input_${col}`;
-        inputElement.placeholder = meta.isInt ? 'Entier' : 'Nombre';
-        return inputElement;
-      }
-      
-      if (meta.isMultiple) {
-        const select = document.createElement('select');
-        select.multiple = true;
-        select.id = `input_${col}`;
-        
-        const optionsList = meta.refChoices.length > 0 ? meta.refChoices : (meta.choices || []).map(c => ({ id: c, label: c }));
-        
-        optionsList.forEach(option => {
-          const opt = document.createElement('option');
-          opt.value = option.id;
-          opt.textContent = option.label;
-          select.appendChild(opt);
-        });
-        
-        return select;
-      }
-      
-      if ((meta.choices && meta.choices.length > 0) || (meta.isRef && meta.refChoices.length > 0)) {
-        inputElement = document.createElement('select');
-        inputElement.id = `input_${col}`;
-        
-        const emptyOption = document.createElement('option');
-        emptyOption.value = '';
-        emptyOption.textContent = '-- Sélectionner --';
-        inputElement.appendChild(emptyOption);
-        
-        const optionsList = meta.refChoices.length > 0 ? meta.refChoices : meta.choices.map(c => ({ id: c, label: c }));
-        optionsList.forEach(option => {
-          const opt = document.createElement('option');
-          opt.value = option.id;
-          opt.textContent = option.label;
-          inputElement.appendChild(opt);
-        });
-        
-        return inputElement;
-      }
-      
-      inputElement = document.createElement('input');
-      inputElement.type = 'text';
-      inputElement.id = `input_${col}`;
-      return inputElement;
-    }
-
-    function getInputValue(col, meta) {
-      const input = document.getElementById(`input_${col}`);
-      
-      if (!input) return null;
-      
-      if (meta.isBool) {
-        return input.checked;
-      }
-      
-      if (meta.isMultiple) {
-        const selectedOptions = Array.from(input.selectedOptions).map(opt => opt.value);
-        const values = meta.isRef ? selectedOptions.map(v => parseInt(v)) : selectedOptions;
-        return ["L", ...values];
-      }
-      
-      if (meta.isRef) {
-        return input.value ? parseInt(input.value) : null;
-      }
-      
-      if (meta.isNumeric || meta.isInt) {
-        return input.value ? parseFloat(input.value) : null;
-      }
-      
-      return input.value;
-    }
-
-    function validateField(col, meta) {
-      const input = document.getElementById(`input_${col}`);
-      const errorMsg = document.getElementById(`error_${col}`);
-      
-      input.classList.remove('error');
-      if (errorMsg) errorMsg.classList.remove('show');
-      
-      if (meta.isNumeric || meta.isInt) {
-        const value = input.value.trim();
-        
-        if (value === '') {
-          return true;
-        }
-        
-        const numValue = parseFloat(value);
-        
-        if (isNaN(numValue)) {
-          input.classList.add('error');
-          if (errorMsg) {
-            errorMsg.textContent = 'Valeur numérique requise';
-            errorMsg.classList.add('show');
-          }
-          return false;
-        }
-        
-        if (meta.isInt && !Number.isInteger(numValue)) {
-          input.classList.add('error');
-          if (errorMsg) {
-            errorMsg.textContent = 'Valeur entière requise (pas de décimales)';
-            errorMsg.classList.add('show');
-          }
-          return false;
-        }
-      }
-      
-      return true;
-    }
-
-    function renderForm() {
-      console.log('🎨 Début renderForm');
-      console.log('formElements à rendre:', formElements);
-      console.log('columnMetadata disponible:', columnMetadata);
-      
-      try {
-        fieldsContainer.innerHTML = '';
-        console.log('fieldsContainer vidé');
-        
-        formElements.forEach((element, index) => {
-          console.log(`Rendu élément ${index}:`, element);
-          
-          try {
-            if (element.type === 'separator') {
-              const separator = document.createElement('div');
-              separator.className = 'separator';
-              fieldsContainer.appendChild(separator);
-              console.log('Séparateur ajouté');
-            } else if (element.type === 'title') {
-              const title = document.createElement('div');
-              title.className = 'custom-title';
-              title.textContent = element.content;
-              fieldsContainer.appendChild(title);
-              console.log('Titre ajouté');
-            } else if (element.type === 'text') {
-              const text = document.createElement('div');
-              text.className = 'custom-text';
-              text.textContent = element.content;
-              fieldsContainer.appendChild(text);
-              console.log('Texte ajouté');
-            } else if (element.type === 'field') {
-              const col = element.fieldName;
-              const meta = columnMetadata[col] || {};
-              
-              console.log(`Création champ ${col}, meta:`, meta);
-              
-              const fieldDiv = document.createElement('div');
-              
-              if (meta.isBool) {
-                fieldDiv.className = 'field checkbox-field';
-              } else {
-                fieldDiv.className = 'field';
-              }
-              
-              const label = document.createElement('label');
-              label.textContent = element.fieldLabel || col;
-              console.log(`Label créé: ${label.textContent}`);
-              
-              const inputElement = createInputForColumn(col, meta);
-              console.log(`Input créé pour ${col}`);
-              
-              if (meta.isBool) {
-                fieldDiv.appendChild(label);
-                fieldDiv.appendChild(inputElement);
-              } else {
-                fieldDiv.appendChild(label);
-                fieldDiv.appendChild(inputElement);
-                
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'error-message';
-                errorMsg.id = `error_${col}`;
-                fieldDiv.appendChild(errorMsg);
-              }
-              
-              fieldsContainer.appendChild(fieldDiv);
-              console.log(`✅ Champ ${col} ajouté au DOM`);
-            }
-          } catch (elemError) {
-            console.error(`❌ Erreur sur élément ${index}:`, elemError);
-            console.error('Stack:', elemError.stack);
-          }
-        });
-        
-        console.log('✅ renderForm terminé, nombre d\'éléments rendus:', fieldsContainer.children.length);
-        console.log('fieldsContainer HTML (200 chars):', fieldsContainer.innerHTML.substring(0, 200));
-        console.log('fieldsContainer dimensions:', {
-          offsetHeight: fieldsContainer.offsetHeight,
-          offsetWidth: fieldsContainer.offsetWidth,
-          scrollHeight: fieldsContainer.scrollHeight
-        });
-      } catch (error) {
-        console.error('❌ Erreur globale dans renderForm:', error);
-        console.error('Stack:', error.stack);
-      }
-    }
-
-    grist.onRecords(async (table, mappings) => {
-      console.log('onRecords appelé', { table, mappings });
-      
-      if (mappings) {
-        columns = Object.keys(mappings).filter(col => col !== 'id');
-      } else if (table && table.length > 0) {
-        columns = Object.keys(table[0]).filter(col => col !== 'id');
+        fieldDiv.appendChild(label);
+        fieldDiv.appendChild(inp);
       } else {
-        console.log('Pas de colonnes disponibles');
-        return;
+        fieldDiv.appendChild(label);
+        fieldDiv.appendChild(inp);
+        const err = document.createElement('div');
+        err.className = 'error-message';
+        err.id = `error_${col}`;
+        fieldDiv.appendChild(err);
       }
       
-      console.log('Colonnes trouvées:', columns);
-      
-      columnMetadata = await getColumnMetadata();
-      console.log('Métadonnées chargées:', columnMetadata);
-      
-      await loadConfiguration();
-    });
+      fieldsContainer.appendChild(fieldDiv);
+    }
+  });
+}
 
-    addButton.addEventListener('click', async () => {
-      let isValid = true;
-      
-      formElements.forEach(element => {
-        if (element.type === 'field') {
-          const col = element.fieldName;
-          const meta = columnMetadata[col] || {};
-          if (!validateField(col, meta)) {
-            isValid = false;
-          }
-        }
-      });
-      
-      if (!isValid) {
-        return;
-      }
-      
-      const fields = {};
-      
-      formElements.forEach(element => {
-        if (element.type === 'field') {
-          const col = element.fieldName;
-          const meta = columnMetadata[col] || {};
-          fields[col] = getInputValue(col, meta);
-        }
-      });
-      
-      try {
-        await grist.selectedTable.create({ fields });
+grist.onRecords(async (table, mappings) => {
+  if (mappings) {
+    columns = Object.keys(mappings).filter(col => col !== 'id');
+  } else if (table && table.length > 0) {
+    columns = Object.keys(table[0]).filter(col => col !== 'id');
+  } else {
+    return;
+  }
+  
+  columnMetadata = await getColumnMetadata();
+  await loadConfiguration();
+});
+
+addButton.addEventListener('click', async () => {
+  let valid = true;
+  
+  formElements.forEach(element => {
+    if (element.type === 'field') {
+      const col = element.fieldName;
+      const meta = columnMetadata[col] || {};
+      if (!validateField(col, meta)) valid = false;
+    }
+  });
+  
+  if (!valid) return;
+  
+  const fields = {};
+  formElements.forEach(element => {
+    if (element.type === 'field') {
+      const col = element.fieldName;
+      const meta = columnMetadata[col] || {};
+      fields[col] = getInputValue(col, meta);
+    }
+  });
+  
+  try {
+    await grist.selectedTable.create({ fields });
+    
+    formElements.forEach(element => {
+      if (element.type === 'field') {
+        const col = element.fieldName;
+        const inp = document.getElementById(`input_${col}`);
+        const meta = columnMetadata[col] || {};
         
-        formElements.forEach(element => {
-          if (element.type === 'field') {
-            const col = element.fieldName;
-            const input = document.getElementById(`input_${col}`);
-            const meta = columnMetadata[col] || {};
-            
-            if (meta.isBool) {
-              input.checked = false;
-            } else if (meta.isMultiple) {
-              Array.from(input.options).forEach(opt => opt.selected = false);
-            } else {
-              input.value = '';
-            }
-          }
-        });
-      } catch (error) {
-        console.error("Erreur lors de la création:", error);
-        alert("Erreur lors de la création: " + error.message);
+        if (meta.isBool) {
+          inp.checked = false;
+        } else if (meta.isMultiple) {
+          Array.from(inp.options).forEach(opt => opt.selected = false);
+        } else {
+          inp.value = '';
+        }
       }
     });
+  } catch (error) {
+    console.error("Erreur:", error);
+    alert("Erreur: " + error.message);
+  }
+});
   </script>
 </body>
 </html>
