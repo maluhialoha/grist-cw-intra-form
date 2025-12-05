@@ -101,6 +101,50 @@ function updateColumnSelect() {
   }
 }
 
+function showEditPopup(element, index) {
+  const overlay = document.getElementById('popupOverlay');
+  overlay.classList.add('show');
+  
+  const popup = document.createElement('div');
+  popup.className = 'edit-popup';
+  popup.innerHTML = `
+    <h3>Modifier le contenu</h3>
+    <textarea id="editContent">${element.content || ''}</textarea>
+    <div class="edit-popup-buttons">
+      <button class="cancel">Annuler</button>
+      <button class="save">Enregistrer</button>
+    </div>
+  `;
+  
+  document.body.appendChild(popup);
+  
+  const textarea = popup.querySelector('#editContent');
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  
+  popup.querySelector('.cancel').addEventListener('click', () => {
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+  
+  popup.querySelector('.save').addEventListener('click', () => {
+    const newContent = document.getElementById('editContent').value.trim();
+    if (newContent) {
+      element.content = newContent;
+      saveConfiguration();
+      renderConfigList();
+      renderForm();
+    }
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+  
+  overlay.addEventListener('click', () => {
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+}
+
 function showValidationPopup(element, index) {
   const overlay = document.getElementById('popupOverlay');
   overlay.classList.add('show');
@@ -110,7 +154,7 @@ function showValidationPopup(element, index) {
   popup.innerHTML = `
     <h3>Validation du champ</h3>
     <label>Nombre max de caractères :</label>
-    <input type="number" id="maxLengthInput" placeholder="4" value="${element.maxLength || ''}">
+    <input type="number" id="maxLengthInput" value="${element.maxLength || ''}">
     <div class="validation-popup-buttons">
       <button class="cancel">Annuler</button>
       <button class="save">Enregistrer</button>
@@ -300,8 +344,8 @@ function renderConfigList() {
       const requiredBtn = document.createElement('div');
       requiredBtn.className = 'icon-btn' + (element.required ? ' active' : '');
       requiredBtn.innerHTML = `
-        ★
-        <span class="tooltip">${element.required ? 'Ne plus rendre le champ obligatoire' : 'Rendre le champ obligatoire'}</span>
+        <span class="icon-star">✦</span>
+        <span class="tooltip">Rendre le champ obligatoire</span>
       `;
       requiredBtn.onclick = () => {
         element.required = !element.required;
@@ -317,7 +361,7 @@ function renderConfigList() {
         validationBtn.className = 'icon-btn' + (element.maxLength ? ' active' : '');
         validationBtn.innerHTML = `
           ✓
-          <span class="tooltip">Validation des caractères</span>
+          <span class="tooltip">Critère de validation</span>
         `;
         validationBtn.onclick = () => {
           showValidationPopup(element, index);
@@ -329,7 +373,7 @@ function renderConfigList() {
       const filterBtn = document.createElement('div');
       filterBtn.className = 'icon-btn' + (element.conditional ? ' active' : '');
       filterBtn.innerHTML = `
-        ▼
+        ⚡
         <span class="tooltip">Affichage conditionnel</span>
       `;
       filterBtn.onclick = () => {
@@ -373,7 +417,14 @@ function renderConfigList() {
       div.appendChild(controls);
     } else if (element.type === 'title') {
       preview.className = 'element-preview title';
-      preview.textContent = element.content;
+      preview.innerHTML = `
+        ${element.content}
+        <span class="edit-icon" onclick="event.stopPropagation();">✎</span>
+      `;
+      preview.querySelector('.edit-icon').onclick = (e) => {
+        e.stopPropagation();
+        showEditPopup(element, index);
+      };
       contentWrapper.appendChild(preview);
       
       const controls = document.createElement('div');
@@ -394,7 +445,14 @@ function renderConfigList() {
       div.appendChild(controls);
     } else if (element.type === 'text') {
       preview.className = 'element-preview text';
-      preview.textContent = element.content;
+      preview.innerHTML = `
+        ${element.content}
+        <span class="edit-icon" onclick="event.stopPropagation();">✎</span>
+      `;
+      preview.querySelector('.edit-icon').onclick = (e) => {
+        e.stopPropagation();
+        showEditPopup(element, index);
+      };
       contentWrapper.appendChild(preview);
       
       const controls = document.createElement('div');
