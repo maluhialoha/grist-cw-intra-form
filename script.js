@@ -20,6 +20,9 @@ const columnSelect = document.getElementById('columnSelect');
 const elementContent = document.getElementById('elementContent');
 const addElementBtn = document.getElementById('addElementBtn');
 const allElementsContainer = document.getElementById('allElements');
+const popupOverlay = document.getElementById('popupOverlay');
+const formError = document.getElementById('formError');
+const formSuccess = document.getElementById('formSuccess');
 
 let columns = [];
 let columnMetadata = {};
@@ -35,12 +38,26 @@ async function loadConfiguration() {
     const missingColumns = columns.filter(col => !existingFields.includes(col));
     
     if (missingColumns.length > 0) {
-      formElements = [...missingColumns.map(col => ({ type: 'field', fieldName: col, fieldLabel: col })), ...formElements];
+      formElements = [...missingColumns.map(col => ({ 
+        type: 'field', 
+        fieldName: col, 
+        fieldLabel: col,
+        required: false,
+        maxLength: null,
+        conditional: null
+      })), ...formElements];
       await saveConfiguration();
     }
     
     if (formElements.length === 0 && columns.length > 0) {
-      formElements = columns.map(col => ({ type: 'field', fieldName: col, fieldLabel: col }));
+      formElements = columns.map(col => ({ 
+        type: 'field', 
+        fieldName: col, 
+        fieldLabel: col,
+        required: false,
+        maxLength: null,
+        conditional: null
+      }));
     }
     
     renderConfigList();
@@ -84,6 +101,161 @@ function updateColumnSelect() {
   }
 }
 
+function showValidationPopup(element, index) {
+  const overlay = document.getElementById('popupOverlay');
+  overlay.classList.add('show');
+  
+  const popup = document.createElement('div');
+  popup.className = 'validation-popup';
+  popup.innerHTML = `
+    <h3>Validation du champ</h3>
+    <label>Nombre max de caractères :</label>
+    <input type="number" id="maxLengthInput" placeholder="4" value="${element.maxLength || ''}">
+    <div class="validation-popup-buttons">
+      <button class="cancel">Annuler</button>
+      <button class="save">Enregistrer</button>
+    </div>
+  `;
+  
+  document.body.appendChild(popup);
+  
+  popup.querySelector('.cancel').addEventListener('click', () => {
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+  
+  popup.querySelector('.save').addEventListener('click', () => {
+    const maxLength = document.getElementById('maxLengthInput').value;
+    element.maxLength = maxLength ? parseInt(maxLength) : null;
+    saveConfiguration();
+    renderConfigList();
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+  
+  overlay.addEventListener('click', () => {
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+}
+
+function showFilterPopup(element, index) {
+  const overlay = document.getElementById('popupOverlay');
+  overlay.classList.add('show');
+  
+  // Récupérer les champs qui sont des listes simples (Choice ou Ref)
+  const conditionalFields = formElements.filter(el => {
+    if (el.type !== 'field') return false;
+    const meta = columnMetadata[el.fieldName];
+    if (!meta) return false;
+    return (meta.choices && meta.choices.length > 0 && !meta.isMultiple) || 
+           (meta.isRef && !meta.isMultiple && meta.refChoices.length > 0);
+  });
+  
+  const popup = document.createElement('div');
+  popup.className = 'filter-popup';
+  
+  let fieldsOptions = '<option value="">-- Sélectionner un champ --</option>';
+  conditionalFields.forEach(field => {
+    fieldsOptions += `<option value="${field.fieldName}">${field.fieldName}</option>`;
+  });
+  
+  popup.innerHTML = `
+    <h3>Affichage conditionnel</h3>
+    <div class="filter-row">
+      <label>Ce champ est affiché si :</label>
+    </div>
+    <div class="filter-row">
+      <select id="conditionalField">${fieldsOptions}</select>
+    </div>
+    <div class="filter-row">
+      <label>est égal à</label>
+    </div>
+    <div class="filter-row">
+      <select id="conditionalValue">
+        <option value="">-- Sélectionner une valeur --</option>
+      </select>
+    </div>
+    <div class="filter-popup-buttons">
+      <button class="cancel">Annuler</button>
+      <button class="save">Enregistrer</button>
+    </div>
+  `;
+  
+  document.body.appendChild(popup);
+  
+  const conditionalFieldSelect = popup.querySelector('#conditionalField');
+  const conditionalValueSelect = popup.querySelector('#conditionalValue');
+  
+  // Pré-remplir si déjà configuré
+  if (element.conditional) {
+    conditionalFieldSelect.value = element.conditional.field;
+    updateConditionalValues(element.conditional.field, conditionalValueSelect);
+    setTimeout(() => {
+      conditionalValueSelect.value = element.conditional.value;
+    }, 0);
+  }
+  
+  conditionalFieldSelect.addEventListener('change', (e) => {
+    updateConditionalValues(e.target.value, conditionalValueSelect);
+  });
+  
+  popup.querySelector('.cancel').addEventListener('click', () => {
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+  
+  popup.querySelector('.save').addEventListener('click', () => {
+    const field = conditionalFieldSelect.value;
+    const value = conditionalValueSelect.value;
+    
+    if (field && value) {
+      element.conditional = { field, value };
+    } else {
+      element.conditional = null;
+    }
+    
+    saveConfiguration();
+    renderConfigList();
+    renderForm();
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+  
+  overlay.addEventListener('click', () => {
+    popup.remove();
+    overlay.classList.remove('show');
+  });
+}
+
+function updateConditionalValues(fieldName, selectElement) {
+  if (!fieldName) {
+    selectElement.innerHTML = '<option value="">-- Sélectionner une valeur --</option>';
+    return;
+  }
+  
+  const meta = columnMetadata[fieldName];
+  if (!meta) return;
+  
+  selectElement.innerHTML = '<option value="">-- Sélectionner une valeur --</option>';
+  
+  if (meta.refChoices && meta.refChoices.length > 0) {
+    meta.refChoices.forEach(choice => {
+      const opt = document.createElement('option');
+      opt.value = choice.id;
+      opt.textContent = choice.label;
+      selectElement.appendChild(opt);
+    });
+  } else if (meta.choices && meta.choices.length > 0) {
+    meta.choices.forEach(choice => {
+      const opt = document.createElement('option');
+      opt.value = choice;
+      opt.textContent = choice;
+      selectElement.appendChild(opt);
+    });
+  }
+}
+
 function renderConfigList() {
   allElementsContainer.innerHTML = '';
   
@@ -93,10 +265,6 @@ function renderConfigList() {
     div.draggable = true;
     div.dataset.index = index;
     
-    const dragHandle = document.createElement('div');
-    dragHandle.className = 'drag-handle';
-    dragHandle.innerHTML = '⋮⋮';
-    
     const contentWrapper = document.createElement('div');
     contentWrapper.className = 'element-content-wrapper';
     
@@ -104,12 +272,10 @@ function renderConfigList() {
     preview.className = 'element-preview';
     
     if (element.type === 'field') {
-      preview.className = 'element-preview field';
-      preview.textContent = `Colonne : ${element.fieldName}`;
-      
-      const labelDiv = document.createElement('div');
-      labelDiv.className = 'element-field-label';
-      labelDiv.textContent = 'Titre du champ :';
+      const meta = columnMetadata[element.fieldName] || {};
+      const isTextField = !meta.isBool && !meta.isDate && !meta.isMultiple && 
+                         (!meta.choices || meta.choices.length === 0) && 
+                         (!meta.isRef || meta.refChoices.length === 0);
       
       const labelInput = document.createElement('input');
       labelInput.type = 'text';
@@ -121,26 +287,57 @@ function renderConfigList() {
         renderForm();
       };
       
-      contentWrapper.appendChild(preview);
-      contentWrapper.appendChild(labelDiv);
+      preview.className = 'element-preview field';
+      preview.textContent = `Id colonne : ${element.fieldName}`;
+      
       contentWrapper.appendChild(labelInput);
-    } else if (element.type === 'separator') {
-      preview.className = 'element-preview separator';
       contentWrapper.appendChild(preview);
-    } else if (element.type === 'title') {
-      preview.className = 'element-preview title';
-      preview.textContent = element.content;
-      contentWrapper.appendChild(preview);
-    } else if (element.type === 'text') {
-      preview.className = 'element-preview text';
-      preview.textContent = element.content;
-      contentWrapper.appendChild(preview);
-    }
-    
-    const controls = document.createElement('div');
-    controls.className = 'element-controls';
-    
-    if (element.type !== 'field') {
+      
+      const controls = document.createElement('div');
+      controls.className = 'element-controls';
+      
+      // Icône requis (*)
+      const requiredBtn = document.createElement('div');
+      requiredBtn.className = 'icon-btn' + (element.required ? ' active' : '');
+      requiredBtn.innerHTML = `
+        ★
+        <span class="tooltip">${element.required ? 'Ne plus rendre le champ obligatoire' : 'Rendre le champ obligatoire'}</span>
+      `;
+      requiredBtn.onclick = () => {
+        element.required = !element.required;
+        saveConfiguration();
+        renderConfigList();
+        renderForm();
+      };
+      controls.appendChild(requiredBtn);
+      
+      // Icône validation (texte uniquement)
+      if (isTextField) {
+        const validationBtn = document.createElement('div');
+        validationBtn.className = 'icon-btn' + (element.maxLength ? ' active' : '');
+        validationBtn.innerHTML = `
+          ✓
+          <span class="tooltip">Validation des caractères</span>
+        `;
+        validationBtn.onclick = () => {
+          showValidationPopup(element, index);
+        };
+        controls.appendChild(validationBtn);
+      }
+      
+      // Icône filtre
+      const filterBtn = document.createElement('div');
+      filterBtn.className = 'icon-btn' + (element.conditional ? ' active' : '');
+      filterBtn.innerHTML = `
+        ▼
+        <span class="tooltip">Affichage conditionnel</span>
+      `;
+      filterBtn.onclick = () => {
+        showFilterPopup(element, index);
+      };
+      controls.appendChild(filterBtn);
+      
+      // Bouton supprimer
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = '🗑️';
       deleteBtn.onclick = () => {
@@ -151,11 +348,77 @@ function renderConfigList() {
         updateColumnSelect();
       };
       controls.appendChild(deleteBtn);
+      
+      div.appendChild(contentWrapper);
+      div.appendChild(controls);
+    } else if (element.type === 'separator') {
+      preview.className = 'element-preview separator';
+      contentWrapper.appendChild(preview);
+      
+      const controls = document.createElement('div');
+      controls.className = 'element-controls';
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.onclick = () => {
+        formElements.splice(index, 1);
+        saveConfiguration();
+        renderConfigList();
+        renderForm();
+        updateColumnSelect();
+      };
+      controls.appendChild(deleteBtn);
+      
+      div.appendChild(contentWrapper);
+      div.appendChild(controls);
+    } else if (element.type === 'title') {
+      preview.className = 'element-preview title';
+      preview.textContent = element.content;
+      contentWrapper.appendChild(preview);
+      
+      const controls = document.createElement('div');
+      controls.className = 'element-controls';
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.onclick = () => {
+        formElements.splice(index, 1);
+        saveConfiguration();
+        renderConfigList();
+        renderForm();
+        updateColumnSelect();
+      };
+      controls.appendChild(deleteBtn);
+      
+      div.appendChild(contentWrapper);
+      div.appendChild(controls);
+    } else if (element.type === 'text') {
+      preview.className = 'element-preview text';
+      preview.textContent = element.content;
+      contentWrapper.appendChild(preview);
+      
+      const controls = document.createElement('div');
+      controls.className = 'element-controls';
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.onclick = () => {
+        formElements.splice(index, 1);
+        saveConfiguration();
+        renderConfigList();
+        renderForm();
+        updateColumnSelect();
+      };
+      controls.appendChild(deleteBtn);
+      
+      div.appendChild(contentWrapper);
+      div.appendChild(controls);
     }
     
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    dragHandle.innerHTML = '⋮⋮';
     div.appendChild(dragHandle);
-    div.appendChild(contentWrapper);
-    div.appendChild(controls);
     
     div.addEventListener('dragstart', function(e) {
       draggedElement = this;
@@ -222,7 +485,14 @@ addElementBtn.addEventListener('click', () => {
       alert('Veuillez sélectionner une colonne');
       return;
     }
-    formElements.push({ type: 'field', fieldName: col, fieldLabel: col });
+    formElements.push({ 
+      type: 'field', 
+      fieldName: col, 
+      fieldLabel: col,
+      required: false,
+      maxLength: null,
+      conditional: null
+    });
   } else if (type === 'separator') {
     formElements.push({ type: 'separator', content: '' });
   } else {
@@ -393,13 +663,40 @@ function getInputValue(col, meta) {
   return inp.value;
 }
 
-function validateField(col, meta) {
+function validateField(col, meta, element) {
   const inp = document.getElementById(`input_${col}`);
   const err = document.getElementById(`error_${col}`);
   
   inp.classList.remove('error');
   if (err) err.classList.remove('show');
   
+  // Vérifier si le champ est requis
+  if (element.required) {
+    if (meta.isBool) {
+      // Les checkboxes sont toujours valides (checked ou non)
+    } else if (meta.isMultiple) {
+      if (inp.selectedOptions.length === 0) {
+        inp.classList.add('error');
+        if (err) {
+          err.textContent = 'Ce champ est requis';
+          err.classList.add('show');
+        }
+        return false;
+      }
+    } else {
+      const val = inp.value.trim();
+      if (val === '') {
+        inp.classList.add('error');
+        if (err) {
+          err.textContent = 'Ce champ est requis';
+          err.classList.add('show');
+        }
+        return false;
+      }
+    }
+  }
+  
+  // Validation numérique
   if (meta.isNumeric || meta.isInt) {
     const val = inp.value.trim();
     if (val === '') return true;
@@ -424,7 +721,46 @@ function validateField(col, meta) {
     }
   }
   
+  // Validation de la longueur maximale
+  if (element.maxLength && !meta.isBool && !meta.isDate && !meta.isMultiple) {
+    const val = inp.value;
+    if (val.length > element.maxLength) {
+      inp.classList.add('error');
+      if (err) {
+        err.textContent = `Ce champ doit contenir ${element.maxLength} caractères maximum`;
+        err.classList.add('show');
+      }
+      return false;
+    }
+  }
+  
   return true;
+}
+
+function shouldShowField(element) {
+  if (!element.conditional) return true;
+  
+  const conditionalField = element.conditional.field;
+  const conditionalValue = element.conditional.value;
+  
+  const inp = document.getElementById(`input_${conditionalField}`);
+  if (!inp) return true;
+  
+  const meta = columnMetadata[conditionalField];
+  if (!meta) return true;
+  
+  // Récupérer la valeur actuelle du champ conditionnel
+  let currentValue;
+  if (meta.isRef) {
+    currentValue = inp.value ? parseInt(inp.value) : null;
+  } else {
+    currentValue = inp.value;
+  }
+  
+  // Comparer avec la valeur conditionnelle
+  const expectedValue = meta.isRef ? parseInt(conditionalValue) : conditionalValue;
+  
+  return currentValue == expectedValue;
 }
 
 function renderForm() {
@@ -451,11 +787,25 @@ function renderForm() {
       
       const fieldDiv = document.createElement('div');
       fieldDiv.className = meta.isBool ? 'field checkbox-field' : 'field';
+      fieldDiv.id = `field_${col}`;
+      
+      // Vérifier si le champ doit être affiché
+      if (!shouldShowField(element)) {
+        fieldDiv.classList.add('hidden');
+      }
       
       const label = document.createElement('label');
       label.textContent = element.fieldLabel || col;
+      if (element.required) {
+        label.textContent += ' *';
+      }
       
       const inp = createInputForColumn(col, meta);
+      
+      // Ajouter un event listener pour mettre à jour l'affichage conditionnel
+      inp.addEventListener('change', () => {
+        updateConditionalFields();
+      });
       
       if (meta.isBool) {
         fieldDiv.appendChild(label);
@@ -470,6 +820,21 @@ function renderForm() {
       }
       
       fieldsContainer.appendChild(fieldDiv);
+    }
+  });
+}
+
+function updateConditionalFields() {
+  formElements.forEach(element => {
+    if (element.type === 'field') {
+      const fieldDiv = document.getElementById(`field_${element.fieldName}`);
+      if (fieldDiv) {
+        if (shouldShowField(element)) {
+          fieldDiv.classList.remove('hidden');
+        } else {
+          fieldDiv.classList.add('hidden');
+        }
+      }
     }
   });
 }
@@ -489,29 +854,55 @@ grist.onRecords(async (table, mappings) => {
 
 addButton.addEventListener('click', async () => {
   let valid = true;
+  let errorMessages = [];
+  
+  formError.classList.remove('show');
+  formSuccess.classList.remove('show');
   
   formElements.forEach(element => {
     if (element.type === 'field') {
       const col = element.fieldName;
       const meta = columnMetadata[col] || {};
-      if (!validateField(col, meta)) valid = false;
+      
+      // Ne valider que si le champ est visible
+      if (shouldShowField(element)) {
+        if (!validateField(col, meta, element)) {
+          valid = false;
+          errorMessages.push(`${element.fieldLabel || col}`);
+        }
+      }
     }
   });
   
-  if (!valid) return;
+  if (!valid) {
+    formError.textContent = 'Il y a une ou plusieurs erreurs dans le formulaire, veuillez vérifier les champs';
+    formError.classList.add('show');
+    return;
+  }
   
   const fields = {};
   formElements.forEach(element => {
     if (element.type === 'field') {
       const col = element.fieldName;
       const meta = columnMetadata[col] || {};
-      fields[col] = getInputValue(col, meta);
+      
+      // Ne collecter que les champs visibles
+      if (shouldShowField(element)) {
+        fields[col] = getInputValue(col, meta);
+      }
     }
   });
   
   try {
     await grist.selectedTable.create({ fields });
     
+    // Afficher le message de succès
+    formSuccess.classList.add('show');
+    setTimeout(() => {
+      formSuccess.classList.remove('show');
+    }, 3000);
+    
+    // Réinitialiser le formulaire
     formElements.forEach(element => {
       if (element.type === 'field') {
         const col = element.fieldName;
@@ -527,6 +918,9 @@ addButton.addEventListener('click', async () => {
         }
       }
     });
+    
+    // Mettre à jour l'affichage conditionnel après réinitialisation
+    updateConditionalFields();
   } catch (error) {
     console.error("Erreur:", error);
     alert("Erreur: " + error.message);
