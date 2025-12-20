@@ -9,6 +9,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; background: #fff; padding: 24px; color: #37352f; display: flex; justify-content: center; }
     .container { width: 500px; }
+    .container.loading { opacity: 0; }
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 2000; }
     .modal.show { display: flex; justify-content: center; align-items: center; }
     .modal-content { width: 600px; max-height: 90vh; display: flex; flex-direction: column; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
@@ -131,11 +132,11 @@
     </div>
   </div>
   
-  <div class="container">
+  <div class="container loading">
     <div id="fields"></div>
     <div class="form-error" id="formError"></div>
     <div class="form-success" id="formSuccess">Votre réponse a bien été enregistrée</div>
-    <div class="no-columns-message" id="noColumnsMessage">Autorisez à la vue l'accès complet au document (panneau de création) et ajoutez les colonnes dans la configuration du widget (menu à trois points > Ouvrir la configuration)</div>
+    <div class="no-columns-message" id="noColumnsMessage">Autorisez à la vue l'accès complet au document (panneau de création)</div>
     <button class="btn" id="addBtn">Valider</button>
   </div>
   

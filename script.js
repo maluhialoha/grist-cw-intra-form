@@ -9,9 +9,6 @@ function initGrist() {
     requiredAccess: 'full',
     onEditOptions: () => configModal.classList.add('show')
   });
-  
-  // Afficher le message initial si aucune colonne n'est encore chargée
-  renderForm();
 }
 
 const fieldsContainer = document.getElementById('fields');
@@ -27,6 +24,7 @@ const popupOverlay = document.getElementById('popupOverlay');
 const formError = document.getElementById('formError');
 const formSuccess = document.getElementById('formSuccess');
 const noColumnsMessage = document.getElementById('noColumnsMessage');
+const container = document.querySelector('.container');
 
 let columns = [];
 let columnMetadata = {};
@@ -36,10 +34,11 @@ let draggedElement = null;
 async function loadConfiguration() {
   try {
     const options = await grist.getOptions();
+    const isFirstInit = !options || !options.formElements;
     formElements = options.formElements || [];
     
-    // Si aucun élément n'existe et qu'il y a des colonnes, ajouter toutes les colonnes
-    if (formElements.length === 0 && columns.length > 0) {
+    // Si c'est la première initialisation et qu'il y a des colonnes, ajouter toutes les colonnes
+    if (isFirstInit && columns.length > 0) {
       formElements = columns.map(col => ({ 
         type: 'field', 
         fieldName: col, 
@@ -49,7 +48,7 @@ async function loadConfiguration() {
         conditional: null
       }));
       await saveConfiguration();
-    } else {
+    } else if (!isFirstInit) {
       // Sinon, ajouter seulement les colonnes manquantes au début
       const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
       const missingColumns = columns.filter(col => !existingFields.includes(col));
@@ -69,6 +68,11 @@ async function loadConfiguration() {
     
     renderConfigList();
     renderForm();
+    
+    // Retirer la classe loading après le premier rendu
+    if (container) {
+      container.classList.remove('loading');
+    }
   } catch (e) {
     console.error('Erreur:', e);
   }
