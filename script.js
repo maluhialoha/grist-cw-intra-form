@@ -31,19 +31,21 @@ let draggedElement = null;
 let initInProgress = false;
 
 async function loadConfiguration() {
-  // Colonnes pas encore connues → on attend
   if (!columns || columns.length === 0) return;
   if (initInProgress) return;
 
   initInProgress = true;
 
   const options = await grist.getOptions();
-  const initialized = options.initialized === true;
+
+  const isFirstInstall =
+    options.initialized !== true &&
+    options.formElements === undefined;
 
   formElements = options.formElements || [];
 
-  // 🔥 PREMIÈRE INSTALL UNIQUEMENT
-  if (!initialized) {
+  // 🔥 VRAIE PREMIÈRE INSTALL
+  if (isFirstInstall) {
     formElements = columns.map(col => ({
       type: 'field',
       fieldName: col,
