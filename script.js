@@ -32,7 +32,7 @@ let draggedElement = null;
 async function loadConfiguration() {
   try {
     const options = await grist.getOptions();
-    const hasBeenConfigured = options && options.hasOwnProperty('formElements');
+    const hasBeenConfigured = options && options.formElements !== undefined;
     formElements = options.formElements || [];
     
     // Si jamais configuré auparavant et qu'il y a des colonnes, ajouter toutes les colonnes
