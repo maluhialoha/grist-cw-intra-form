@@ -49,16 +49,13 @@ async function loadConfiguration() {
     options = {};
   }
 
-  formElements = options.formElements || [];
-  console.log('formElements AVANT:', formElements);
-
   const isFirstInstall =
     options.initialized !== true &&
     options.formElements === undefined;
 
   console.log('isFirstInstall:', isFirstInstall);
 
-  // 🔥 AUTO-INIT UNIQUEMENT ICI
+  // 🔥 AUTO-INIT UNIQUEMENT SI PREMIÈRE INSTALL
   if (isFirstInstall) {
     console.warn('🔥 Initialisation automatique des colonnes');
 
@@ -75,7 +72,12 @@ async function loadConfiguration() {
       initialized: true,
       formElements
     });
+  } else {
+    // ✅ CHARGER LA CONFIG EXISTANTE
+    formElements = options.formElements || [];
   }
+
+  console.log('formElements FINAL:', formElements);
 
   // ⚠️ RENDER TOUJOURS
   renderConfigList();
