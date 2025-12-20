@@ -87,6 +87,13 @@ async function loadConfiguration() {
   console.groupEnd();
 }
 
+async function saveConfiguration() {
+  await grist.setOptions({
+    initialized: true,
+    formElements
+  });
+}
+
 
 function updateColumnSelect() {
   const usedColumns = formElements
