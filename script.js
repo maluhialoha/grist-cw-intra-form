@@ -9,6 +9,14 @@ function initGrist() {
     requiredAccess: 'full',
     onEditOptions: () => configModal.classList.add('show')
   });
+  
+  // Afficher le container après un court délai si onRecords n'est pas appelé
+  setTimeout(() => {
+    if (container && container.classList.contains('loading')) {
+      container.classList.remove('loading');
+      renderForm();
+    }
+  }, 500);
 }
 
 const fieldsContainer = document.getElementById('fields');
@@ -33,12 +41,16 @@ let draggedElement = null;
 
 async function loadConfiguration() {
   try {
+    console.log('loadConfiguration: début');
     const options = await grist.getOptions();
+    console.log('options:', options);
     const isFirstInit = !options || !options.formElements;
+    console.log('isFirstInit:', isFirstInit, 'columns.length:', columns.length);
     formElements = options.formElements || [];
     
     // Si c'est la première initialisation et qu'il y a des colonnes, ajouter toutes les colonnes
     if (isFirstInit && columns.length > 0) {
+      console.log('Premier init: ajout de toutes les colonnes');
       formElements = columns.map(col => ({ 
         type: 'field', 
         fieldName: col, 
@@ -49,9 +61,11 @@ async function loadConfiguration() {
       }));
       await saveConfiguration();
     } else if (!isFirstInit) {
+      console.log('Pas premier init: vérification des colonnes manquantes');
       // Sinon, ajouter seulement les colonnes manquantes au début
       const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
       const missingColumns = columns.filter(col => !existingFields.includes(col));
+      console.log('existingFields:', existingFields, 'missingColumns:', missingColumns);
       
       if (missingColumns.length > 0) {
         formElements = [...missingColumns.map(col => ({ 
@@ -66,11 +80,13 @@ async function loadConfiguration() {
       }
     }
     
+    console.log('formElements final:', formElements);
     renderConfigList();
     renderForm();
     
     // Retirer la classe loading après le premier rendu
     if (container) {
+      console.log('Retrait de la classe loading');
       container.classList.remove('loading');
     }
   } catch (e) {
