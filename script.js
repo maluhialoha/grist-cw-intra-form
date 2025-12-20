@@ -33,29 +33,24 @@ let initInProgress = false;
 async function loadConfiguration() {
   console.group('⚙️ loadConfiguration');
 
-  console.log('columns au début:', columns);
+  console.log('columns:', columns);
   if (!columns || columns.length === 0) {
     console.warn('⛔ Abort: columns vides');
     console.groupEnd();
     return;
   }
 
-  if (initInProgress) {
-    console.warn('⛔ Abort: init déjà en cours');
-    console.groupEnd();
-    return;
-  }
-
-  initInProgress = true;
-
   let options = await grist.getOptions();
   console.log('📦 options brutes:', options);
 
-  // 🔑 POINT CRITIQUE : première install = options === null
+  // 🔑 première install = options === null
   if (options === null) {
-    console.warn('🆕 Première install détectée (options === null)');
+    console.warn('🆕 Première install détectée');
     options = {};
   }
+
+  formElements = options.formElements || [];
+  console.log('formElements AVANT:', formElements);
 
   const isFirstInstall =
     options.initialized !== true &&
@@ -63,11 +58,9 @@ async function loadConfiguration() {
 
   console.log('isFirstInstall:', isFirstInstall);
 
-  formElements = options.formElements || [];
-  console.log('formElements AVANT:', formElements);
-
+  // 🔥 AUTO-INIT UNIQUEMENT ICI
   if (isFirstInstall) {
-    console.warn('🔥 AUTO-INIT : ajout de toutes les colonnes');
+    console.warn('🔥 Initialisation automatique des colonnes');
 
     formElements = columns.map(col => ({
       type: 'field',
@@ -78,23 +71,17 @@ async function loadConfiguration() {
       conditional: null
     }));
 
-    console.log('formElements APRÈS INIT:', formElements);
-
     await grist.setOptions({
       initialized: true,
       formElements
     });
-
-    console.log('✅ setOptions terminé');
-  } else {
-    console.log('ℹ️ Pas une première install');
   }
 
+  // ⚠️ RENDER TOUJOURS
   renderConfigList();
   renderForm();
   updateColumnSelect();
 
-  initInProgress = false;
   console.groupEnd();
 }
 
