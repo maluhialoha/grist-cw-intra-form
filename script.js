@@ -34,8 +34,6 @@ async function loadConfiguration() {
   console.group('⚙️ loadConfiguration');
 
   console.log('columns au début:', columns);
-  console.log('initInProgress:', initInProgress);
-
   if (!columns || columns.length === 0) {
     console.warn('⛔ Abort: columns vides');
     console.groupEnd();
@@ -50,8 +48,14 @@ async function loadConfiguration() {
 
   initInProgress = true;
 
-  const options = await grist.getOptions();
+  let options = await grist.getOptions();
   console.log('📦 options brutes:', options);
+
+  // 🔑 POINT CRITIQUE : première install = options === null
+  if (options === null) {
+    console.warn('🆕 Première install détectée (options === null)');
+    options = {};
+  }
 
   const isFirstInstall =
     options.initialized !== true &&
@@ -60,10 +64,10 @@ async function loadConfiguration() {
   console.log('isFirstInstall:', isFirstInstall);
 
   formElements = options.formElements || [];
-  console.log('formElements AVANT:', JSON.parse(JSON.stringify(formElements)));
+  console.log('formElements AVANT:', formElements);
 
   if (isFirstInstall) {
-    console.warn('🔥 PREMIÈRE INSTALL — auto ajout des colonnes');
+    console.warn('🔥 AUTO-INIT : ajout de toutes les colonnes');
 
     formElements = columns.map(col => ({
       type: 'field',
@@ -81,9 +85,9 @@ async function loadConfiguration() {
       formElements
     });
 
-    console.log('✅ setOptions exécuté');
+    console.log('✅ setOptions terminé');
   } else {
-    console.log('ℹ️ Pas une première install → aucun auto-ajout');
+    console.log('ℹ️ Pas une première install');
   }
 
   renderConfigList();
@@ -91,12 +95,7 @@ async function loadConfiguration() {
   updateColumnSelect();
 
   initInProgress = false;
-
   console.groupEnd();
-}
-
-async function saveConfiguration() {
-  await grist.setOption('formElements', formElements);
 }
 
 
