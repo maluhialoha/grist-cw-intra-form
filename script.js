@@ -28,18 +28,22 @@ let columns = [];
 let columnMetadata = {};
 let formElements = [];
 let draggedElement = null;
+let initInProgress = false;
 
 async function loadConfiguration() {
-  const options = await grist.getOptions();
+  // Colonnes pas encore connues → on attend
+  if (!columns || columns.length === 0) return;
+  if (initInProgress) return;
 
+  initInProgress = true;
+
+  const options = await grist.getOptions();
   const initialized = options.initialized === true;
+
   formElements = options.formElements || [];
 
   // 🔥 PREMIÈRE INSTALL UNIQUEMENT
   if (!initialized) {
-    // Colonnes pas encore connues → on attend
-    if (!columns || columns.length === 0) return;
-
     formElements = columns.map(col => ({
       type: 'field',
       fieldName: col,
@@ -58,6 +62,8 @@ async function loadConfiguration() {
   renderConfigList();
   renderForm();
   updateColumnSelect();
+
+  initInProgress = false;
 }
 
 async function saveConfiguration() {
