@@ -9,6 +9,9 @@ function initGrist() {
     requiredAccess: 'full',
     onEditOptions: () => configModal.classList.add('show')
   });
+  
+  // Afficher le message initial si aucune colonne n'est encore chargée
+  renderForm();
 }
 
 const fieldsContainer = document.getElementById('fields');
@@ -35,21 +38,7 @@ async function loadConfiguration() {
     const options = await grist.getOptions();
     formElements = options.formElements || [];
     
-    const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
-    const missingColumns = columns.filter(col => !existingFields.includes(col));
-    
-    if (missingColumns.length > 0) {
-      formElements = [...missingColumns.map(col => ({ 
-        type: 'field', 
-        fieldName: col, 
-        fieldLabel: col,
-        required: false,
-        maxLength: null,
-        conditional: null
-      })), ...formElements];
-      await saveConfiguration();
-    }
-    
+    // Si aucun élément n'existe et qu'il y a des colonnes, ajouter toutes les colonnes
     if (formElements.length === 0 && columns.length > 0) {
       formElements = columns.map(col => ({ 
         type: 'field', 
@@ -59,6 +48,23 @@ async function loadConfiguration() {
         maxLength: null,
         conditional: null
       }));
+      await saveConfiguration();
+    } else {
+      // Sinon, ajouter seulement les colonnes manquantes au début
+      const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
+      const missingColumns = columns.filter(col => !existingFields.includes(col));
+      
+      if (missingColumns.length > 0) {
+        formElements = [...missingColumns.map(col => ({ 
+          type: 'field', 
+          fieldName: col, 
+          fieldLabel: col,
+          required: false,
+          maxLength: null,
+          conditional: null
+        })), ...formElements];
+        await saveConfiguration();
+      }
     }
     
     renderConfigList();
@@ -1016,7 +1022,7 @@ grist.onRecords(async (table, mappings) => {
   } else if (table && table.length > 0) {
     columns = Object.keys(table[0]).filter(col => col !== 'id');
   } else {
-    return;
+    columns = [];
   }
   
   columnMetadata = await getColumnMetadata();
