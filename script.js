@@ -23,6 +23,7 @@ const allElementsContainer = document.getElementById('allElements');
 const popupOverlay = document.getElementById('popupOverlay');
 const formError = document.getElementById('formError');
 const formSuccess = document.getElementById('formSuccess');
+const noColumnsMessage = document.getElementById('noColumnsMessage');
 
 let columns = [];
 let columnMetadata = {};
@@ -151,13 +152,21 @@ function showValidationPopup(element, index) {
   
   const popup = document.createElement('div');
   popup.className = 'validation-popup';
+  
+  const hasValidation = element.maxLength !== null && element.maxLength !== undefined;
+  
   popup.innerHTML = `
     <h3>Validation du champ</h3>
     <label>Nombre max de caractères :</label>
     <input type="number" id="maxLengthInput" value="${element.maxLength || ''}">
     <div class="validation-popup-buttons">
-      <button class="cancel">Annuler</button>
-      <button class="save">Enregistrer</button>
+      <div>
+        ${hasValidation ? '<button class="delete">Supprimer</button>' : ''}
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="cancel">Annuler</button>
+        <button class="save">Enregistrer</button>
+      </div>
     </div>
   `;
   
@@ -167,6 +176,16 @@ function showValidationPopup(element, index) {
     popup.remove();
     overlay.classList.remove('show');
   });
+  
+  if (hasValidation) {
+    popup.querySelector('.delete').addEventListener('click', () => {
+      element.maxLength = null;
+      saveConfiguration();
+      renderConfigList();
+      popup.remove();
+      overlay.classList.remove('show');
+    });
+  }
   
   popup.querySelector('.save').addEventListener('click', () => {
     const maxLength = document.getElementById('maxLengthInput').value;
@@ -196,6 +215,8 @@ function showFilterPopup(element, index) {
            (meta.isRef && !meta.isMultiple && meta.refChoices.length > 0);
   });
   
+  const hasConditional = element.conditional !== null && element.conditional !== undefined;
+  
   const popup = document.createElement('div');
   popup.className = 'filter-popup';
   
@@ -221,8 +242,13 @@ function showFilterPopup(element, index) {
       </select>
     </div>
     <div class="filter-popup-buttons">
-      <button class="cancel">Annuler</button>
-      <button class="save">Enregistrer</button>
+      <div>
+        ${hasConditional ? '<button class="delete">Supprimer</button>' : ''}
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="cancel">Annuler</button>
+        <button class="save">Enregistrer</button>
+      </div>
     </div>
   `;
   
@@ -248,6 +274,17 @@ function showFilterPopup(element, index) {
     popup.remove();
     overlay.classList.remove('show');
   });
+  
+  if (hasConditional) {
+    popup.querySelector('.delete').addEventListener('click', () => {
+      element.conditional = null;
+      saveConfiguration();
+      renderConfigList();
+      renderForm();
+      popup.remove();
+      overlay.classList.remove('show');
+    });
+  }
   
   popup.querySelector('.save').addEventListener('click', () => {
     const field = conditionalFieldSelect.value;
@@ -308,6 +345,11 @@ function renderConfigList() {
     div.className = 'element-item';
     div.draggable = true;
     div.dataset.index = index;
+    
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    dragHandle.innerHTML = '⋮⋮';
+    div.appendChild(dragHandle);
     
     const contentWrapper = document.createElement('div');
     contentWrapper.className = 'element-content-wrapper';
@@ -473,11 +515,6 @@ function renderConfigList() {
       div.appendChild(controls);
     }
     
-    const dragHandle = document.createElement('div');
-    dragHandle.className = 'drag-handle';
-    dragHandle.innerHTML = '⋮⋮';
-    div.appendChild(dragHandle);
-    
     div.addEventListener('dragstart', function(e) {
       draggedElement = this;
       this.classList.add('dragging');
@@ -487,24 +524,77 @@ function renderConfigList() {
     div.addEventListener('dragend', function() {
       this.classList.remove('dragging');
       draggedElement = null;
+      
+      // Nettoyer tous les indicateurs visuels
+      document.querySelectorAll('.element-item').forEach(el => {
+        el.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
     });
     
     div.addEventListener('dragover', function(e) {
       if (e.preventDefault) e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
+      
+      if (draggedElement && draggedElement !== this) {
+        // Nettoyer les classes précédentes
+        document.querySelectorAll('.element-item').forEach(el => {
+          el.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+        
+        // Calculer la position relative de la souris dans l'élément
+        const rect = this.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        
+        if (e.clientY < midpoint) {
+          this.classList.add('drag-over-top');
+        } else {
+          this.classList.add('drag-over-bottom');
+        }
+      }
+      
       return false;
+    });
+    
+    div.addEventListener('dragleave', function(e) {
+      // Vérifier si on quitte vraiment l'élément (et pas juste un enfant)
+      if (e.target === this) {
+        this.classList.remove('drag-over-top', 'drag-over-bottom');
+      }
     });
     
     div.addEventListener('drop', function(e) {
       if (e.stopPropagation) e.stopPropagation();
       
-      if (draggedElement !== this) {
+      // Nettoyer tous les indicateurs visuels
+      document.querySelectorAll('.element-item').forEach(el => {
+        el.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+      
+      if (draggedElement && draggedElement !== this) {
         const draggedIndex = parseInt(draggedElement.dataset.index);
         const targetIndex = parseInt(this.dataset.index);
         
+        // Calculer la position relative de la souris dans l'élément
+        const rect = this.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        
+        let insertPosition;
+        if (e.clientY < midpoint) {
+          // Insérer avant l'élément cible
+          insertPosition = targetIndex;
+        } else {
+          // Insérer après l'élément cible
+          insertPosition = targetIndex + 1;
+        }
+        
+        // Ajuster la position si on déplace vers le bas
+        if (draggedIndex < insertPosition) {
+          insertPosition--;
+        }
+        
         const temp = formElements[draggedIndex];
         formElements.splice(draggedIndex, 1);
-        formElements.splice(targetIndex, 0, temp);
+        formElements.splice(insertPosition, 0, temp);
         
         saveConfiguration();
         renderConfigList();
@@ -662,7 +752,6 @@ function createInputForColumn(col, meta) {
     inp = document.createElement('input');
     inp.type = 'text';
     inp.id = `input_${col}`;
-    inp.placeholder = meta.isInt ? 'Entier' : 'Nombre';
     return inp;
   }
   
@@ -677,6 +766,19 @@ function createInputForColumn(col, meta) {
       o.textContent = opt.label;
       sel.appendChild(o);
     });
+    
+    // Permettre la sélection/déselection au simple clic
+    sel.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      const option = e.target;
+      if (option.tagName === 'OPTION') {
+        option.selected = !option.selected;
+        sel.focus();
+        // Déclencher l'événement change pour la mise à jour conditionnelle
+        sel.dispatchEvent(new Event('change'));
+      }
+    });
+    
     return sel;
   }
   
@@ -823,6 +925,17 @@ function shouldShowField(element) {
 
 function renderForm() {
   fieldsContainer.innerHTML = '';
+  
+  // Vérifier s'il y a au moins un champ de type 'field'
+  const hasFields = formElements.some(element => element.type === 'field');
+  
+  if (!hasFields) {
+    noColumnsMessage.classList.add('show');
+    addButton.style.display = 'none';
+  } else {
+    noColumnsMessage.classList.remove('show');
+    addButton.style.display = 'block';
+  }
   
   formElements.forEach(element => {
     if (element.type === 'separator') {
