@@ -32,24 +32,11 @@ let draggedElement = null;
 async function loadConfiguration() {
   try {
     const options = await grist.getOptions();
+    const hasBeenConfigured = options && options.hasOwnProperty('formElements');
     formElements = options.formElements || [];
     
-    const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
-    const missingColumns = columns.filter(col => !existingFields.includes(col));
-    
-    if (missingColumns.length > 0) {
-      formElements = [...missingColumns.map(col => ({ 
-        type: 'field', 
-        fieldName: col, 
-        fieldLabel: col,
-        required: false,
-        maxLength: null,
-        conditional: null
-      })), ...formElements];
-      await saveConfiguration();
-    }
-    
-    if (formElements.length === 0 && columns.length > 0) {
+    // Si jamais configuré auparavant et qu'il y a des colonnes, ajouter toutes les colonnes
+    if (!hasBeenConfigured && columns.length > 0) {
       formElements = columns.map(col => ({ 
         type: 'field', 
         fieldName: col, 
@@ -59,6 +46,22 @@ async function loadConfiguration() {
         conditional: null
       }));
       await saveConfiguration();
+    } else {
+      // Sinon, ajouter seulement les colonnes manquantes au début
+      const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
+      const missingColumns = columns.filter(col => !existingFields.includes(col));
+      
+      if (missingColumns.length > 0) {
+        formElements = [...missingColumns.map(col => ({ 
+          type: 'field', 
+          fieldName: col, 
+          fieldLabel: col,
+          required: false,
+          maxLength: null,
+          conditional: null
+        })), ...formElements];
+        await saveConfiguration();
+      }
     }
     
     renderConfigList();
