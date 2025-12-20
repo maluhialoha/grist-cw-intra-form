@@ -31,21 +31,40 @@ let draggedElement = null;
 let initInProgress = false;
 
 async function loadConfiguration() {
-  if (!columns || columns.length === 0) return;
-  if (initInProgress) return;
+  console.group('⚙️ loadConfiguration');
+
+  console.log('columns au début:', columns);
+  console.log('initInProgress:', initInProgress);
+
+  if (!columns || columns.length === 0) {
+    console.warn('⛔ Abort: columns vides');
+    console.groupEnd();
+    return;
+  }
+
+  if (initInProgress) {
+    console.warn('⛔ Abort: init déjà en cours');
+    console.groupEnd();
+    return;
+  }
 
   initInProgress = true;
 
   const options = await grist.getOptions();
+  console.log('📦 options brutes:', options);
 
   const isFirstInstall =
     options.initialized !== true &&
     options.formElements === undefined;
 
-  formElements = options.formElements || [];
+  console.log('isFirstInstall:', isFirstInstall);
 
-  // 🔥 VRAIE PREMIÈRE INSTALL
+  formElements = options.formElements || [];
+  console.log('formElements AVANT:', JSON.parse(JSON.stringify(formElements)));
+
   if (isFirstInstall) {
+    console.warn('🔥 PREMIÈRE INSTALL — auto ajout des colonnes');
+
     formElements = columns.map(col => ({
       type: 'field',
       fieldName: col,
@@ -55,10 +74,16 @@ async function loadConfiguration() {
       conditional: null
     }));
 
+    console.log('formElements APRÈS INIT:', formElements);
+
     await grist.setOptions({
       initialized: true,
       formElements
     });
+
+    console.log('✅ setOptions exécuté');
+  } else {
+    console.log('ℹ️ Pas une première install → aucun auto-ajout');
   }
 
   renderConfigList();
@@ -66,6 +91,8 @@ async function loadConfiguration() {
   updateColumnSelect();
 
   initInProgress = false;
+
+  console.groupEnd();
 }
 
 async function saveConfiguration() {
@@ -1003,17 +1030,34 @@ function updateConditionalFields() {
   });
 }
 
+console.log('🧪 Champs rendus:', 
+  Array.from(document.querySelectorAll('.field')).map(f => f.id)
+);
+
 grist.onRecords(async (table, mappings) => {
+  console.group('📦 onRecords');
+
+  console.log('table:', table);
+  console.log('mappings:', mappings);
+
   if (mappings) {
     columns = Object.keys(mappings).filter(col => col !== 'id');
   } else if (table && table.length > 0) {
     columns = Object.keys(table[0]).filter(col => col !== 'id');
   } else {
+    console.warn('❌ Aucun mapping ni table');
+    console.groupEnd();
     return;
   }
-  
+
+  console.log('✅ columns détectées:', columns);
+
   columnMetadata = await getColumnMetadata();
+  console.log('columnMetadata:', columnMetadata);
+
   await loadConfiguration();
+
+  console.groupEnd();
 });
 
 addButton.addEventListener('click', async () => {
