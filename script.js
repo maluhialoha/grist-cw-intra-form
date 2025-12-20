@@ -30,75 +30,71 @@ let formElements = [];
 let draggedElement = null;
 
 async function loadConfiguration() {
-  try {
-    const options = await grist.getOptions();
-    formElements = options.formElements || [];
-    
-    const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
-    const missingColumns = columns.filter(col => !existingFields.includes(col));
-    
-    if (missingColumns.length > 0) {
-      formElements = [...missingColumns.map(col => ({ 
-        type: 'field', 
-        fieldName: col, 
-        fieldLabel: col,
-        required: false,
-        maxLength: null,
-        conditional: null
-      })), ...formElements];
-      await saveConfiguration();
-    }
-    
-    if (formElements.length === 0 && columns.length > 0) {
-      formElements = columns.map(col => ({ 
-        type: 'field', 
-        fieldName: col, 
-        fieldLabel: col,
-        required: false,
-        maxLength: null,
-        conditional: null
-      }));
-    }
-    
-    renderConfigList();
-    renderForm();
-  } catch (e) {
-    console.error('Erreur:', e);
+  const options = await grist.getOptions();
+
+  const initialized = options.initialized === true;
+  formElements = options.formElements || [];
+
+  // 🔥 PREMIÈRE INSTALL UNIQUEMENT
+  if (!initialized) {
+    // Colonnes pas encore connues → on attend
+    if (!columns || columns.length === 0) return;
+
+    formElements = columns.map(col => ({
+      type: 'field',
+      fieldName: col,
+      fieldLabel: col,
+      required: false,
+      maxLength: null,
+      conditional: null
+    }));
+
+    await grist.setOptions({
+      initialized: true,
+      formElements
+    });
   }
+
+  renderConfigList();
+  renderForm();
+  updateColumnSelect();
 }
 
 async function saveConfiguration() {
-  try {
-    await grist.setOption('formElements', formElements);
-  } catch (e) {
-    console.error('Erreur:', e);
-  }
+  await grist.setOption('formElements', formElements);
 }
 
+
 function updateColumnSelect() {
-  const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
-  const availableColumns = columns.filter(col => !existingFields.includes(col));
-  
+  const usedColumns = formElements
+    .filter(el => el.type === 'field')
+    .map(el => el.fieldName);
+
+  const availableColumns = columns.filter(
+    col => !usedColumns.includes(col)
+  );
+
   columnSelect.innerHTML = '';
-  
+
   if (availableColumns.length === 0) {
     const opt = document.createElement('option');
-    opt.textContent = 'Toutes les colonnes sont déjà dans le formulaire';
+    opt.textContent = 'Toutes les colonnes sont déjà utilisées';
     opt.disabled = true;
     columnSelect.appendChild(opt);
-  } else {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '-- Sélectionner une colonne --';
-    columnSelect.appendChild(opt);
-    
-    availableColumns.forEach(col => {
-      const opt = document.createElement('option');
-      opt.value = col;
-      opt.textContent = col;
-      columnSelect.appendChild(opt);
-    });
+    return;
   }
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '-- Sélectionner une colonne --';
+  columnSelect.appendChild(placeholder);
+
+  availableColumns.forEach(col => {
+    const opt = document.createElement('option');
+    opt.value = col;
+    opt.textContent = col;
+    columnSelect.appendChild(opt);
+  });
 }
 
 function showEditPopup(element, index) {
@@ -144,6 +140,7 @@ function showEditPopup(element, index) {
     overlay.classList.remove('show');
   });
 }
+
 
 function showValidationPopup(element, index) {
   const overlay = document.getElementById('popupOverlay');
