@@ -9,14 +9,6 @@ function initGrist() {
     requiredAccess: 'full',
     onEditOptions: () => configModal.classList.add('show')
   });
-  
-  // Afficher le container après un court délai si onRecords n'est pas appelé
-  setTimeout(() => {
-    if (container && container.classList.contains('loading')) {
-      container.classList.remove('loading');
-      renderForm();
-    }
-  }, 500);
 }
 
 const fieldsContainer = document.getElementById('fields');
@@ -31,8 +23,6 @@ const allElementsContainer = document.getElementById('allElements');
 const popupOverlay = document.getElementById('popupOverlay');
 const formError = document.getElementById('formError');
 const formSuccess = document.getElementById('formSuccess');
-const noColumnsMessage = document.getElementById('noColumnsMessage');
-const container = document.querySelector('.container');
 
 let columns = [];
 let columnMetadata = {};
@@ -41,16 +31,25 @@ let draggedElement = null;
 
 async function loadConfiguration() {
   try {
-    console.log('loadConfiguration: début');
     const options = await grist.getOptions();
-    console.log('options:', options);
-    const isFirstInit = !options || !options.formElements;
-    console.log('isFirstInit:', isFirstInit, 'columns.length:', columns.length);
     formElements = options.formElements || [];
     
-    // Si c'est la première initialisation et qu'il y a des colonnes, ajouter toutes les colonnes
-    if (isFirstInit && columns.length > 0) {
-      console.log('Premier init: ajout de toutes les colonnes');
+    const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
+    const missingColumns = columns.filter(col => !existingFields.includes(col));
+    
+    if (missingColumns.length > 0) {
+      formElements = [...missingColumns.map(col => ({ 
+        type: 'field', 
+        fieldName: col, 
+        fieldLabel: col,
+        required: false,
+        maxLength: null,
+        conditional: null
+      })), ...formElements];
+      await saveConfiguration();
+    }
+    
+    if (formElements.length === 0 && columns.length > 0) {
       formElements = columns.map(col => ({ 
         type: 'field', 
         fieldName: col, 
@@ -60,35 +59,10 @@ async function loadConfiguration() {
         conditional: null
       }));
       await saveConfiguration();
-    } else if (!isFirstInit) {
-      console.log('Pas premier init: vérification des colonnes manquantes');
-      // Sinon, ajouter seulement les colonnes manquantes au début
-      const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
-      const missingColumns = columns.filter(col => !existingFields.includes(col));
-      console.log('existingFields:', existingFields, 'missingColumns:', missingColumns);
-      
-      if (missingColumns.length > 0) {
-        formElements = [...missingColumns.map(col => ({ 
-          type: 'field', 
-          fieldName: col, 
-          fieldLabel: col,
-          required: false,
-          maxLength: null,
-          conditional: null
-        })), ...formElements];
-        await saveConfiguration();
-      }
     }
     
-    console.log('formElements final:', formElements);
     renderConfigList();
     renderForm();
-    
-    // Retirer la classe loading après le premier rendu
-    if (container) {
-      console.log('Retrait de la classe loading');
-      container.classList.remove('loading');
-    }
   } catch (e) {
     console.error('Erreur:', e);
   }
@@ -952,17 +926,6 @@ function shouldShowField(element) {
 function renderForm() {
   fieldsContainer.innerHTML = '';
   
-  // Vérifier s'il y a au moins un champ de type 'field'
-  const hasFields = formElements.some(element => element.type === 'field');
-  
-  if (!hasFields) {
-    noColumnsMessage.classList.add('show');
-    addButton.style.display = 'none';
-  } else {
-    noColumnsMessage.classList.remove('show');
-    addButton.style.display = 'block';
-  }
-  
   formElements.forEach(element => {
     if (element.type === 'separator') {
       const sep = document.createElement('div');
@@ -1042,7 +1005,7 @@ grist.onRecords(async (table, mappings) => {
   } else if (table && table.length > 0) {
     columns = Object.keys(table[0]).filter(col => col !== 'id');
   } else {
-    columns = [];
+    return;
   }
   
   columnMetadata = await getColumnMetadata();
