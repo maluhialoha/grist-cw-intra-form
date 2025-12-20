@@ -32,30 +32,44 @@ let draggedElement = null;
 async function loadConfiguration() {
   try {
     const options = await grist.getOptions();
-
-    // Valeurs par défaut
-    const initialized = options.initialized === true;
     formElements = options.formElements || [];
-
-    // Première installation : ajout de toutes colonnes
-    if (!initialized && columns.length > 0) {
-      formElements = columns.map(col => ({
-        type: 'field',
-        fieldName: col,
+    
+    const existingFields = formElements.filter(el => el.type === 'field').map(el => el.fieldName);
+    const missingColumns = columns.filter(col => !existingFields.includes(col));
+    
+    if (missingColumns.length > 0) {
+      formElements = [...missingColumns.map(col => ({ 
+        type: 'field', 
+        fieldName: col, 
+        fieldLabel: col,
+        required: false,
+        maxLength: null,
+        conditional: null
+      })), ...formElements];
+      await saveConfiguration();
+    }
+    
+    if (formElements.length === 0 && columns.length > 0) {
+      formElements = columns.map(col => ({ 
+        type: 'field', 
+        fieldName: col, 
         fieldLabel: col,
         required: false,
         maxLength: null,
         conditional: null
       }));
-
-      await grist.setOptions({
-        initialized: true,
-        formElements
-      });
     }
-
+    
     renderConfigList();
     renderForm();
+  } catch (e) {
+    console.error('Erreur:', e);
+  }
+}
+
+async function saveConfiguration() {
+  try {
+    await grist.setOption('formElements', formElements);
   } catch (e) {
     console.error('Erreur:', e);
   }
