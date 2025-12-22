@@ -14,10 +14,9 @@
     .modal-content { width: 600px; max-height: 90vh; display: flex; flex-direction: column; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e0e0e0; }
     .modal-header h2 { font-size: 16px; font-weight: 600; }
-    .modal-body { flex: 1; overflow-y: auto; margin-bottom: 16px; padding-right: 8px; }
-    .modal-footer { display: flex; justify-content: flex-end; padding-top: 12px; border-top: 1px solid #e0e0e0; }
-    .preview-btn { padding: 10px 20px; background: #2383e2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .preview-btn { padding: 8px 16px; background: #2383e2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; }
     .preview-btn:hover { background: #1a6bb8; }
+    .modal-body { flex: 1; overflow-y: auto; margin-bottom: 16px; padding-right: 8px; }
     .element-item { padding: 8px 10px 8px 36px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 6px; background: #f9f9f9; display: flex; align-items: flex-start; gap: 10px; position: relative; transition: background-color 0.2s; }
     .element-item.dragging { opacity: 0.5; }
     .element-item.drag-over-top { border-top: 2px solid #2383e2; }
@@ -68,7 +67,7 @@
     .edit-popup-buttons button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
     .edit-popup-buttons .cancel { background: #f0f0f0; color: #37352f; }
     .edit-popup-buttons .save { background: #2383e2; color: white; }
-    .add-section { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #f9f9f9; border-radius: 4px; border: 1px solid #e0e0e0; margin-bottom: 16px; }
+    .add-section { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #f9f9f9; border-radius: 4px; border: 1px solid #e0e0e0; }
     .add-section-fields { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .add-element-btn { padding: 10px 16px; background: #2383e2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap; }
     .add-element-btn:hover { background: #1a6bb8; }
@@ -110,6 +109,11 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2>Configuration du formulaire</h2>
+        <button class="preview-btn" id="closeModal">Prévisualiser</button>
+      </div>
+      
+      <div class="modal-body">
+        <div id="allElements"></div>
       </div>
       
       <div class="add-section">
@@ -125,14 +129,6 @@
           <input type="text" id="elementContent" class="element-input" style="display: none;">
         </div>
         <button class="add-element-btn" id="addElementBtn">Ajouter</button>
-      </div>
-      
-      <div class="modal-body">
-        <div id="allElements"></div>
-      </div>
-      
-      <div class="modal-footer">
-        <button class="preview-btn" id="closeModal">Prévisualiser</button>
       </div>
     </div>
   </div>
