@@ -44,6 +44,29 @@ let formElements = [];
 let draggedElement = null;
 let initInProgress = false;
 
+async function getAllColumnsFromMetadata() {
+  try {
+    const table = await grist.getTable();
+    const currentTableId = await table._platform.getTableId();
+    const docInfo = await grist.docApi.fetchTable('_grist_Tables_column');
+    const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
+    
+    const currentTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentTableId)];
+    
+    const cols = [];
+    for (let i = 0; i < docInfo.colId.length; i++) {
+      if (docInfo.parentId[i] === currentTableNumericId) {
+        cols.push(docInfo.colId[i]);
+      }
+    }
+    
+    return cols;
+  } catch (error) {
+    console.error("Erreur getAllColumnsFromMetadata:", error);
+    return [];
+  }
+}
+
 async function loadConfiguration() {
   console.group('⚙️ loadConfiguration');
 
