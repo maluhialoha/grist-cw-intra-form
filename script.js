@@ -1042,7 +1042,6 @@ grist.onRecords(async (table, mappings) => {
   } else {
     console.warn('❌ Aucun mapping ni table');
     console.groupEnd();
-    return;
   }
 
   console.log('✅ columns détectées:', columns);
