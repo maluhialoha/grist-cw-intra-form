@@ -53,11 +53,7 @@ async function getAllColumnsFromMetadata() {
     const cols = [];
     for (let i = 0; i < docInfo.colId.length; i++) {
       if (docInfo.parentId[i] === currentTableNumericId) {
-        const colId = docInfo.colId[i];
-        // Filtrer manualSort et les colonnes grist_helperDisplay*
-        if (colId !== 'manualSort' && !colId.startsWith('grist_Transform')) {
-          cols.push(colId);
-        }
+        cols.push(docInfo.colId[i]);
       }
     }
 
@@ -66,6 +62,63 @@ async function getAllColumnsFromMetadata() {
     console.error("Erreur getAllColumnsFromMetadata:", error);
     return [];
   }
+}
+
+async function loadConfiguration() {
+  console.group('⚙️ loadConfiguration');
+
+  console.log('columns:', columns);
+  if (!columns || columns.length === 0) {
+    console.warn('⛔ Abort: columns vides');
+    console.groupEnd();
+    return;
+  }
+
+  let options = await grist.getOptions();
+  console.log('📦 options brutes:', options);
+
+  // 🔑 première install = options === null
+  if (options === null) {
+    console.warn('🆕 Première install détectée');
+    options = {};
+  }
+
+  const isFirstInstall =
+    options.initialized !== true &&
+    options.formElements === undefined;
+
+  console.log('isFirstInstall:', isFirstInstall);
+
+  // 🔥 AUTO-INIT UNIQUEMENT SI PREMIÈRE INSTALL
+  if (isFirstInstall) {
+    console.warn('🔥 Initialisation automatique des colonnes');
+
+    formElements = columns.map(col => ({
+      type: 'field',
+      fieldName: col,
+      fieldLabel: col,
+      required: false,
+      maxLength: null,
+      conditional: null
+    }));
+
+    await grist.setOptions({
+      initialized: true,
+      formElements
+    });
+  } else {
+    // ✅ CHARGER LA CONFIG EXISTANTE
+    formElements = options.formElements || [];
+  }
+
+  console.log('formElements FINAL:', formElements);
+
+  // ⚠️ RENDER TOUJOURS
+  renderConfigList();
+  renderForm();
+  updateColumnSelect();
+
+  console.groupEnd();
 }
 
 async function saveConfiguration() {
@@ -374,16 +427,6 @@ function renderConfigList() {
       labelInput.type = 'text';
       labelInput.className = 'field-label-input';
       labelInput.value = element.fieldLabel || element.fieldName;
-
-      // 🔧 FIX : empêcher la propagation du drag sur l'input
-      labelInput.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-      });
-
-      labelInput.addEventListener('click', (e) => {
-        e.stopPropagation();
-      });
-
       labelInput.onchange = (e) => {
         element.fieldLabel = e.target.value;
         saveConfiguration();
