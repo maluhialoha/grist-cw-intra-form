@@ -42,26 +42,25 @@ grist.ready({
 
 
 async function getAllColumnsFromMetadata() {
-  try {
-    const table = await grist.getTable();
-    const currentTableId = await table._platform.getTableId();
-    const docInfo = await grist.docApi.fetchTable('_grist_Tables_column');
-    const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
+  const table = await grist.getTable();
+  const tableName = await table._platform.getTableId();
 
-    const currentTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentTableId)];
+  const tables = await grist.docApi.fetchTable('_grist_Tables');
+  const columnsTable = await grist.docApi.fetchTable('_grist_Tables_column');
 
-    const cols = [];
-    for (let i = 0; i < docInfo.colId.length; i++) {
-      if (docInfo.parentId[i] === currentTableNumericId) {
-        cols.push(docInfo.colId[i]);
+  const tableRef = tables.id[tables.tableId.indexOf(tableName)];
+  const cols = [];
+
+  for (let i = 0; i < columnsTable.parentId.length; i++) {
+    if (columnsTable.parentId[i] === tableRef) {
+      const colId = columnsTable.colId[i];
+      if (colId !== 'id') {
+        cols.push(colId);
       }
     }
-
-    return cols;
-  } catch (error) {
-    console.error("Erreur getAllColumnsFromMetadata:", error);
-    return [];
   }
+
+  return cols;
 }
 
 async function loadConfiguration() {
