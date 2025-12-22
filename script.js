@@ -437,6 +437,23 @@ function renderConfigList() {
         renderForm();
       };
 
+      labelInput.addEventListener('mousedown', e => {
+        e.stopPropagation();
+      });
+
+      labelInput.addEventListener('click', e => {
+        e.stopPropagation();
+      });
+
+      labelInput.addEventListener('focus', () => {
+        div.draggable = false;
+      });
+
+      labelInput.addEventListener('blur', () => {
+        div.draggable = true;
+      });
+
+
       preview.className = 'element-preview field';
       preview.textContent = `Id colonne : ${element.fieldName}`;
 
