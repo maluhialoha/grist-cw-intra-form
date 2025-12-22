@@ -9,6 +9,20 @@ function initGrist() {
     requiredAccess: 'full',
     onEditOptions: () => configModal.classList.add('show')
   });
+
+  (async () => {
+  console.group('🚀 INIT METADATA');
+
+  columns = await getAllColumnsFromMetadata();
+  console.log('✅ Colonnes metadata:', columns);
+
+  columnMetadata = await getColumnMetadata();
+  console.log('📘 columnMetadata:', columnMetadata);
+
+  await loadConfiguration();
+
+  console.groupEnd();
+})();
 }
 
 const fieldsContainer = document.getElementById('fields');
@@ -1029,30 +1043,11 @@ console.log('🧪 Champs rendus:',
   Array.from(document.querySelectorAll('.field')).map(f => f.id)
 );
 
-grist.onRecords(async (table, mappings) => {
-  console.group('📦 onRecords');
-
-  console.log('table:', table);
-  console.log('mappings:', mappings);
-
-  if (mappings) {
-    columns = Object.keys(mappings).filter(col => col !== 'id');
-  } else if (table && table.length > 0) {
-    columns = Object.keys(table[0]).filter(col => col !== 'id');
-  } else {
-    console.warn('❌ Aucun mapping ni table');
-    console.groupEnd();
-  }
-
-  console.log('✅ columns détectées:', columns);
-
-  columnMetadata = await getColumnMetadata();
-  console.log('columnMetadata:', columnMetadata);
-
-  await loadConfiguration();
-
-  console.groupEnd();
+grist.onRecords(() => {
+  console.log('🔄 Records updated');
+  renderForm();
 });
+
 
 addButton.addEventListener('click', async () => {
   let valid = true;
