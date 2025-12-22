@@ -54,9 +54,14 @@ async function getAllColumnsFromMetadata() {
   for (let i = 0; i < columnsTable.parentId.length; i++) {
     if (columnsTable.parentId[i] === tableRef) {
       const colId = columnsTable.colId[i];
-      if (colId !== 'id') {
+      if (
+        colId !== 'id' &&
+        colId !== 'manualSort' &&
+        !colId.startsWith('grist_helperDisplay')
+      ) {
         cols.push(colId);
       }
+
     }
   }
 
