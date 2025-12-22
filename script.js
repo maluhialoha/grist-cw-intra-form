@@ -57,7 +57,7 @@ async function getAllColumnsFromMetadata() {
       if (
         colId !== 'id' &&
         colId !== 'manualSort' &&
-        !colId.startsWith('grist_helperDisplay')
+        !colId.startsWith('gristHelper')
       ) {
         cols.push(colId);
       }
