@@ -1,30 +1,3 @@
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initGrist);
-} else {
-  initGrist();
-}
-
-function initGrist() {
-  grist.ready({ 
-    requiredAccess: 'full',
-    onEditOptions: () => configModal.classList.add('show')
-  });
-
-  (async () => {
-  console.group('🚀 INIT METADATA');
-
-  columns = await getAllColumnsFromMetadata();
-  console.log('✅ Colonnes metadata:', columns);
-
-  columnMetadata = await getColumnMetadata();
-  console.log('📘 columnMetadata:', columnMetadata);
-
-  await loadConfiguration();
-
-  console.groupEnd();
-})();
-}
-
 const fieldsContainer = document.getElementById('fields');
 const addButton = document.getElementById('addBtn');
 const configModal = document.getElementById('configModal');
@@ -44,22 +17,46 @@ let formElements = [];
 let draggedElement = null;
 let initInProgress = false;
 
+
+grist.ready({
+  requiredAccess: 'full',
+  onEditOptions: () => configModal.classList.add('show')
+});
+
+(async () => {
+  console.group('🚀 INIT METADATA');
+
+  columns = await getAllColumnsFromMetadata();
+  console.log('✅ Colonnes metadata:', columns);
+
+  columnMetadata = await getColumnMetadata();
+  console.log('📘 columnMetadata:', columnMetadata);
+
+  await loadConfiguration();
+
+  console.groupEnd();
+})();
+
+
+
+
+
 async function getAllColumnsFromMetadata() {
   try {
     const table = await grist.getTable();
     const currentTableId = await table._platform.getTableId();
     const docInfo = await grist.docApi.fetchTable('_grist_Tables_column');
     const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
-    
+
     const currentTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentTableId)];
-    
+
     const cols = [];
     for (let i = 0; i < docInfo.colId.length; i++) {
       if (docInfo.parentId[i] === currentTableNumericId) {
         cols.push(docInfo.colId[i]);
       }
     }
-    
+
     return cols;
   } catch (error) {
     console.error("Erreur getAllColumnsFromMetadata:", error);
@@ -167,7 +164,7 @@ function updateColumnSelect() {
 function showEditPopup(element, index) {
   const overlay = document.getElementById('popupOverlay');
   overlay.classList.add('show');
-  
+
   const popup = document.createElement('div');
   popup.className = 'edit-popup';
   popup.innerHTML = `
@@ -178,18 +175,18 @@ function showEditPopup(element, index) {
       <button class="save">Enregistrer</button>
     </div>
   `;
-  
+
   document.body.appendChild(popup);
-  
+
   const textarea = popup.querySelector('#editContent');
   textarea.focus();
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-  
+
   popup.querySelector('.cancel').addEventListener('click', () => {
     popup.remove();
     overlay.classList.remove('show');
   });
-  
+
   popup.querySelector('.save').addEventListener('click', () => {
     const newContent = document.getElementById('editContent').value.trim();
     if (newContent) {
@@ -201,7 +198,7 @@ function showEditPopup(element, index) {
     popup.remove();
     overlay.classList.remove('show');
   });
-  
+
   overlay.addEventListener('click', () => {
     popup.remove();
     overlay.classList.remove('show');
@@ -212,12 +209,12 @@ function showEditPopup(element, index) {
 function showValidationPopup(element, index) {
   const overlay = document.getElementById('popupOverlay');
   overlay.classList.add('show');
-  
+
   const popup = document.createElement('div');
   popup.className = 'validation-popup';
-  
+
   const hasValidation = element.maxLength !== null && element.maxLength !== undefined;
-  
+
   popup.innerHTML = `
     <h3>Validation du champ</h3>
     <label>Nombre max de caractères :</label>
@@ -232,14 +229,14 @@ function showValidationPopup(element, index) {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(popup);
-  
+
   popup.querySelector('.cancel').addEventListener('click', () => {
     popup.remove();
     overlay.classList.remove('show');
   });
-  
+
   if (hasValidation) {
     popup.querySelector('.delete').addEventListener('click', () => {
       element.maxLength = null;
@@ -249,7 +246,7 @@ function showValidationPopup(element, index) {
       overlay.classList.remove('show');
     });
   }
-  
+
   popup.querySelector('.save').addEventListener('click', () => {
     const maxLength = document.getElementById('maxLengthInput').value;
     element.maxLength = maxLength ? parseInt(maxLength) : null;
@@ -258,7 +255,7 @@ function showValidationPopup(element, index) {
     popup.remove();
     overlay.classList.remove('show');
   });
-  
+
   overlay.addEventListener('click', () => {
     popup.remove();
     overlay.classList.remove('show');
@@ -268,26 +265,26 @@ function showValidationPopup(element, index) {
 function showFilterPopup(element, index) {
   const overlay = document.getElementById('popupOverlay');
   overlay.classList.add('show');
-  
+
   // Récupérer les champs qui sont des listes simples (Choice ou Ref)
   const conditionalFields = formElements.filter(el => {
     if (el.type !== 'field') return false;
     const meta = columnMetadata[el.fieldName];
     if (!meta) return false;
-    return (meta.choices && meta.choices.length > 0 && !meta.isMultiple) || 
-           (meta.isRef && !meta.isMultiple && meta.refChoices.length > 0);
+    return (meta.choices && meta.choices.length > 0 && !meta.isMultiple) ||
+      (meta.isRef && !meta.isMultiple && meta.refChoices.length > 0);
   });
-  
+
   const hasConditional = element.conditional !== null && element.conditional !== undefined;
-  
+
   const popup = document.createElement('div');
   popup.className = 'filter-popup';
-  
+
   let fieldsOptions = '<option value="">-- Sélectionner un champ --</option>';
   conditionalFields.forEach(field => {
     fieldsOptions += `<option value="${field.fieldName}">${field.fieldName}</option>`;
   });
-  
+
   popup.innerHTML = `
     <h3>Affichage conditionnel</h3>
     <div class="filter-row">
@@ -314,12 +311,12 @@ function showFilterPopup(element, index) {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(popup);
-  
+
   const conditionalFieldSelect = popup.querySelector('#conditionalField');
   const conditionalValueSelect = popup.querySelector('#conditionalValue');
-  
+
   // Pré-remplir si déjà configuré
   if (element.conditional) {
     conditionalFieldSelect.value = element.conditional.field;
@@ -328,16 +325,16 @@ function showFilterPopup(element, index) {
       conditionalValueSelect.value = element.conditional.value;
     }, 0);
   }
-  
+
   conditionalFieldSelect.addEventListener('change', (e) => {
     updateConditionalValues(e.target.value, conditionalValueSelect);
   });
-  
+
   popup.querySelector('.cancel').addEventListener('click', () => {
     popup.remove();
     overlay.classList.remove('show');
   });
-  
+
   if (hasConditional) {
     popup.querySelector('.delete').addEventListener('click', () => {
       element.conditional = null;
@@ -348,24 +345,24 @@ function showFilterPopup(element, index) {
       overlay.classList.remove('show');
     });
   }
-  
+
   popup.querySelector('.save').addEventListener('click', () => {
     const field = conditionalFieldSelect.value;
     const value = conditionalValueSelect.value;
-    
+
     if (field && value) {
       element.conditional = { field, value };
     } else {
       element.conditional = null;
     }
-    
+
     saveConfiguration();
     renderConfigList();
     renderForm();
     popup.remove();
     overlay.classList.remove('show');
   });
-  
+
   overlay.addEventListener('click', () => {
     popup.remove();
     overlay.classList.remove('show');
@@ -377,12 +374,12 @@ function updateConditionalValues(fieldName, selectElement) {
     selectElement.innerHTML = '<option value="">-- Sélectionner une valeur --</option>';
     return;
   }
-  
+
   const meta = columnMetadata[fieldName];
   if (!meta) return;
-  
+
   selectElement.innerHTML = '<option value="">-- Sélectionner une valeur --</option>';
-  
+
   if (meta.refChoices && meta.refChoices.length > 0) {
     meta.refChoices.forEach(choice => {
       const opt = document.createElement('option');
@@ -402,30 +399,30 @@ function updateConditionalValues(fieldName, selectElement) {
 
 function renderConfigList() {
   allElementsContainer.innerHTML = '';
-  
+
   formElements.forEach((element, index) => {
     const div = document.createElement('div');
     div.className = 'element-item';
     div.draggable = true;
     div.dataset.index = index;
-    
+
     const dragHandle = document.createElement('div');
     dragHandle.className = 'drag-handle';
     dragHandle.innerHTML = '⋮⋮';
     div.appendChild(dragHandle);
-    
+
     const contentWrapper = document.createElement('div');
     contentWrapper.className = 'element-content-wrapper';
-    
+
     const preview = document.createElement('div');
     preview.className = 'element-preview';
-    
+
     if (element.type === 'field') {
       const meta = columnMetadata[element.fieldName] || {};
-      const isTextField = !meta.isBool && !meta.isDate && !meta.isMultiple && 
-                         (!meta.choices || meta.choices.length === 0) && 
-                         (!meta.isRef || meta.refChoices.length === 0);
-      
+      const isTextField = !meta.isBool && !meta.isDate && !meta.isMultiple &&
+        (!meta.choices || meta.choices.length === 0) &&
+        (!meta.isRef || meta.refChoices.length === 0);
+
       const labelInput = document.createElement('input');
       labelInput.type = 'text';
       labelInput.className = 'field-label-input';
@@ -435,16 +432,16 @@ function renderConfigList() {
         saveConfiguration();
         renderForm();
       };
-      
+
       preview.className = 'element-preview field';
       preview.textContent = `Id colonne : ${element.fieldName}`;
-      
+
       contentWrapper.appendChild(labelInput);
       contentWrapper.appendChild(preview);
-      
+
       const controls = document.createElement('div');
       controls.className = 'element-controls';
-      
+
       // Icône requis (*)
       const requiredBtn = document.createElement('div');
       requiredBtn.className = 'icon-btn' + (element.required ? ' active' : '');
@@ -459,7 +456,7 @@ function renderConfigList() {
         renderForm();
       };
       controls.appendChild(requiredBtn);
-      
+
       // Icône validation (texte uniquement)
       if (isTextField) {
         const validationBtn = document.createElement('div');
@@ -473,7 +470,7 @@ function renderConfigList() {
         };
         controls.appendChild(validationBtn);
       }
-      
+
       // Icône filtre
       const filterBtn = document.createElement('div');
       filterBtn.className = 'icon-btn' + (element.conditional ? ' active' : '');
@@ -485,7 +482,7 @@ function renderConfigList() {
         showFilterPopup(element, index);
       };
       controls.appendChild(filterBtn);
-      
+
       // Bouton supprimer
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = '🗑️';
@@ -497,16 +494,16 @@ function renderConfigList() {
         updateColumnSelect();
       };
       controls.appendChild(deleteBtn);
-      
+
       div.appendChild(contentWrapper);
       div.appendChild(controls);
     } else if (element.type === 'separator') {
       preview.className = 'element-preview separator';
       contentWrapper.appendChild(preview);
-      
+
       const controls = document.createElement('div');
       controls.className = 'element-controls';
-      
+
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = '🗑️';
       deleteBtn.onclick = () => {
@@ -517,7 +514,7 @@ function renderConfigList() {
         updateColumnSelect();
       };
       controls.appendChild(deleteBtn);
-      
+
       div.appendChild(contentWrapper);
       div.appendChild(controls);
     } else if (element.type === 'title') {
@@ -531,10 +528,10 @@ function renderConfigList() {
         showEditPopup(element, index);
       };
       contentWrapper.appendChild(preview);
-      
+
       const controls = document.createElement('div');
       controls.className = 'element-controls';
-      
+
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = '🗑️';
       deleteBtn.onclick = () => {
@@ -545,7 +542,7 @@ function renderConfigList() {
         updateColumnSelect();
       };
       controls.appendChild(deleteBtn);
-      
+
       div.appendChild(contentWrapper);
       div.appendChild(controls);
     } else if (element.type === 'text') {
@@ -559,10 +556,10 @@ function renderConfigList() {
         showEditPopup(element, index);
       };
       contentWrapper.appendChild(preview);
-      
+
       const controls = document.createElement('div');
       controls.className = 'element-controls';
-      
+
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = '🗑️';
       deleteBtn.onclick = () => {
@@ -573,74 +570,74 @@ function renderConfigList() {
         updateColumnSelect();
       };
       controls.appendChild(deleteBtn);
-      
+
       div.appendChild(contentWrapper);
       div.appendChild(controls);
     }
-    
-    div.addEventListener('dragstart', function(e) {
+
+    div.addEventListener('dragstart', function (e) {
       draggedElement = this;
       this.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
     });
-    
-    div.addEventListener('dragend', function() {
+
+    div.addEventListener('dragend', function () {
       this.classList.remove('dragging');
       draggedElement = null;
-      
+
       // Nettoyer tous les indicateurs visuels
       document.querySelectorAll('.element-item').forEach(el => {
         el.classList.remove('drag-over-top', 'drag-over-bottom');
       });
     });
-    
-    div.addEventListener('dragover', function(e) {
+
+    div.addEventListener('dragover', function (e) {
       if (e.preventDefault) e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      
+
       if (draggedElement && draggedElement !== this) {
         // Nettoyer les classes précédentes
         document.querySelectorAll('.element-item').forEach(el => {
           el.classList.remove('drag-over-top', 'drag-over-bottom');
         });
-        
+
         // Calculer la position relative de la souris dans l'élément
         const rect = this.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
-        
+
         if (e.clientY < midpoint) {
           this.classList.add('drag-over-top');
         } else {
           this.classList.add('drag-over-bottom');
         }
       }
-      
+
       return false;
     });
-    
-    div.addEventListener('dragleave', function(e) {
+
+    div.addEventListener('dragleave', function (e) {
       // Vérifier si on quitte vraiment l'élément (et pas juste un enfant)
       if (e.target === this) {
         this.classList.remove('drag-over-top', 'drag-over-bottom');
       }
     });
-    
-    div.addEventListener('drop', function(e) {
+
+    div.addEventListener('drop', function (e) {
       if (e.stopPropagation) e.stopPropagation();
-      
+
       // Nettoyer tous les indicateurs visuels
       document.querySelectorAll('.element-item').forEach(el => {
         el.classList.remove('drag-over-top', 'drag-over-bottom');
       });
-      
+
       if (draggedElement && draggedElement !== this) {
         const draggedIndex = parseInt(draggedElement.dataset.index);
         const targetIndex = parseInt(this.dataset.index);
-        
+
         // Calculer la position relative de la souris dans l'élément
         const rect = this.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
-        
+
         let insertPosition;
         if (e.clientY < midpoint) {
           // Insérer avant l'élément cible
@@ -649,24 +646,24 @@ function renderConfigList() {
           // Insérer après l'élément cible
           insertPosition = targetIndex + 1;
         }
-        
+
         // Ajuster la position si on déplace vers le bas
         if (draggedIndex < insertPosition) {
           insertPosition--;
         }
-        
+
         const temp = formElements[draggedIndex];
         formElements.splice(draggedIndex, 1);
         formElements.splice(insertPosition, 0, temp);
-        
+
         saveConfiguration();
         renderConfigList();
         renderForm();
       }
-      
+
       return false;
     });
-    
+
     allElementsContainer.appendChild(div);
   });
 }
@@ -674,7 +671,7 @@ function renderConfigList() {
 elementType.addEventListener('change', () => {
   columnSelect.style.display = 'none';
   elementContent.style.display = 'none';
-  
+
   if (elementType.value === 'column') {
     updateColumnSelect();
     columnSelect.style.display = 'block';
@@ -689,16 +686,16 @@ elementType.addEventListener('change', () => {
 addElementBtn.addEventListener('click', () => {
   const type = elementType.value;
   if (!type) return;
-  
+
   if (type === 'column') {
     const col = columnSelect.value;
     if (!col) {
       alert('Veuillez sélectionner une colonne');
       return;
     }
-    formElements.push({ 
-      type: 'field', 
-      fieldName: col, 
+    formElements.push({
+      type: 'field',
+      fieldName: col,
       fieldLabel: col,
       required: false,
       maxLength: null,
@@ -714,11 +711,11 @@ addElementBtn.addEventListener('click', () => {
     }
     formElements.push({ type, content });
   }
-  
+
   saveConfiguration();
   renderConfigList();
   renderForm();
-  
+
   elementType.value = '';
   columnSelect.value = '';
   elementContent.value = '';
@@ -738,31 +735,31 @@ async function getColumnMetadata() {
     const docInfo = await grist.docApi.fetchTable('_grist_Tables_column');
     const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
     const metadata = {};
-    
+
     const currentTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentTableId)];
-    
+
     for (let i = 0; i < docInfo.colId.length; i++) {
       if (docInfo.parentId[i] !== currentTableNumericId) continue;
-      
+
       const colId = docInfo.colId[i];
       const type = docInfo.type[i];
       let choices = null;
       let refTable = null;
       let refChoices = [];
-      
+
       if (docInfo.widgetOptions?.[i]) {
         try {
           const options = JSON.parse(docInfo.widgetOptions[i]);
           if (options.choices) choices = options.choices;
-        } catch (e) {}
+        } catch (e) { }
       }
-      
+
       if (type.startsWith('Ref:')) {
         refTable = type.substring(4);
       } else if (type.startsWith('RefList:')) {
         refTable = type.substring(8);
       }
-      
+
       if (refTable) {
         try {
           const refData = await grist.docApi.fetchTable(refTable);
@@ -770,9 +767,9 @@ async function getColumnMetadata() {
             id: id,
             label: refData[Object.keys(refData).find(k => k !== 'id' && k !== 'manualSort')]?.[idx] || id
           }));
-        } catch (e) {}
+        } catch (e) { }
       }
-      
+
       metadata[colId] = {
         type,
         choices,
@@ -786,7 +783,7 @@ async function getColumnMetadata() {
         isInt: type === 'Int'
       };
     }
-    
+
     return metadata;
   } catch (error) {
     console.error("Erreur:", error);
@@ -796,28 +793,28 @@ async function getColumnMetadata() {
 
 function createInputForColumn(col, meta) {
   let inp;
-  
+
   if (meta.isBool) {
     inp = document.createElement('input');
     inp.type = 'checkbox';
     inp.id = `input_${col}`;
     return inp;
   }
-  
+
   if (meta.isDate) {
     inp = document.createElement('input');
     inp.type = 'date';
     inp.id = `input_${col}`;
     return inp;
   }
-  
+
   if (meta.isNumeric || meta.isInt) {
     inp = document.createElement('input');
     inp.type = 'text';
     inp.id = `input_${col}`;
     return inp;
   }
-  
+
   if (meta.isMultiple) {
     const sel = document.createElement('select');
     sel.multiple = true;
@@ -829,9 +826,9 @@ function createInputForColumn(col, meta) {
       o.textContent = opt.label;
       sel.appendChild(o);
     });
-    
+
     // Permettre la sélection/déselection au simple clic
-    sel.addEventListener('mousedown', function(e) {
+    sel.addEventListener('mousedown', function (e) {
       e.preventDefault();
       const option = e.target;
       if (option.tagName === 'OPTION') {
@@ -841,10 +838,10 @@ function createInputForColumn(col, meta) {
         sel.dispatchEvent(new Event('change'));
       }
     });
-    
+
     return sel;
   }
-  
+
   if ((meta.choices && meta.choices.length > 0) || (meta.isRef && meta.refChoices.length > 0)) {
     inp = document.createElement('select');
     inp.id = `input_${col}`;
@@ -861,7 +858,7 @@ function createInputForColumn(col, meta) {
     });
     return inp;
   }
-  
+
   inp = document.createElement('input');
   inp.type = 'text';
   inp.id = `input_${col}`;
@@ -871,28 +868,28 @@ function createInputForColumn(col, meta) {
 function getInputValue(col, meta) {
   const inp = document.getElementById(`input_${col}`);
   if (!inp) return null;
-  
+
   if (meta.isBool) return inp.checked;
-  
+
   if (meta.isMultiple) {
     const selected = Array.from(inp.selectedOptions).map(opt => opt.value);
     const values = meta.isRef ? selected.map(v => parseInt(v)) : selected;
     return ["L", ...values];
   }
-  
+
   if (meta.isRef) return inp.value ? parseInt(inp.value) : null;
   if (meta.isNumeric || meta.isInt) return inp.value ? parseFloat(inp.value) : null;
-  
+
   return inp.value;
 }
 
 function validateField(col, meta, element) {
   const inp = document.getElementById(`input_${col}`);
   const err = document.getElementById(`error_${col}`);
-  
+
   inp.classList.remove('error');
   if (err) err.classList.remove('show');
-  
+
   // Vérifier si le champ est requis
   if (element.required) {
     if (meta.isBool) {
@@ -918,12 +915,12 @@ function validateField(col, meta, element) {
       }
     }
   }
-  
+
   // Validation numérique
   if (meta.isNumeric || meta.isInt) {
     const val = inp.value.trim();
     if (val === '') return true;
-    
+
     const num = parseFloat(val);
     if (isNaN(num)) {
       inp.classList.add('error');
@@ -933,7 +930,7 @@ function validateField(col, meta, element) {
       }
       return false;
     }
-    
+
     if (meta.isInt && !Number.isInteger(num)) {
       inp.classList.add('error');
       if (err) {
@@ -943,7 +940,7 @@ function validateField(col, meta, element) {
       return false;
     }
   }
-  
+
   // Validation de la longueur maximale
   if (element.maxLength && !meta.isBool && !meta.isDate && !meta.isMultiple) {
     const val = inp.value;
@@ -956,22 +953,22 @@ function validateField(col, meta, element) {
       return false;
     }
   }
-  
+
   return true;
 }
 
 function shouldShowField(element) {
   if (!element.conditional) return true;
-  
+
   const conditionalField = element.conditional.field;
   const conditionalValue = element.conditional.value;
-  
+
   const inp = document.getElementById(`input_${conditionalField}`);
   if (!inp) return true;
-  
+
   const meta = columnMetadata[conditionalField];
   if (!meta) return true;
-  
+
   // Récupérer la valeur actuelle du champ conditionnel
   let currentValue;
   if (meta.isRef) {
@@ -979,16 +976,16 @@ function shouldShowField(element) {
   } else {
     currentValue = inp.value;
   }
-  
+
   // Comparer avec la valeur conditionnelle
   const expectedValue = meta.isRef ? parseInt(conditionalValue) : conditionalValue;
-  
+
   return currentValue == expectedValue;
 }
 
 function renderForm() {
   fieldsContainer.innerHTML = '';
-  
+
   formElements.forEach(element => {
     if (element.type === 'separator') {
       const sep = document.createElement('div');
@@ -1007,29 +1004,29 @@ function renderForm() {
     } else if (element.type === 'field') {
       const col = element.fieldName;
       const meta = columnMetadata[col] || {};
-      
+
       const fieldDiv = document.createElement('div');
       fieldDiv.className = meta.isBool ? 'field checkbox-field' : 'field';
       fieldDiv.id = `field_${col}`;
-      
+
       // Vérifier si le champ doit être affiché
       if (!shouldShowField(element)) {
         fieldDiv.classList.add('hidden');
       }
-      
+
       const label = document.createElement('label');
       label.textContent = element.fieldLabel || col;
       if (element.required) {
         label.textContent += ' *';
       }
-      
+
       const inp = createInputForColumn(col, meta);
-      
+
       // Ajouter un event listener pour mettre à jour l'affichage conditionnel
       inp.addEventListener('change', () => {
         updateConditionalFields();
       });
-      
+
       if (meta.isBool) {
         fieldDiv.appendChild(label);
         fieldDiv.appendChild(inp);
@@ -1041,7 +1038,7 @@ function renderForm() {
         err.id = `error_${col}`;
         fieldDiv.appendChild(err);
       }
-      
+
       fieldsContainer.appendChild(fieldDiv);
     }
   });
@@ -1062,7 +1059,7 @@ function updateConditionalFields() {
   });
 }
 
-console.log('🧪 Champs rendus:', 
+console.log('🧪 Champs rendus:',
   Array.from(document.querySelectorAll('.field')).map(f => f.id)
 );
 
@@ -1075,15 +1072,15 @@ grist.onRecords(() => {
 addButton.addEventListener('click', async () => {
   let valid = true;
   let errorMessages = [];
-  
+
   formError.classList.remove('show');
   formSuccess.classList.remove('show');
-  
+
   formElements.forEach(element => {
     if (element.type === 'field') {
       const col = element.fieldName;
       const meta = columnMetadata[col] || {};
-      
+
       // Ne valider que si le champ est visible
       if (shouldShowField(element)) {
         if (!validateField(col, meta, element)) {
@@ -1093,42 +1090,42 @@ addButton.addEventListener('click', async () => {
       }
     }
   });
-  
+
   if (!valid) {
     formError.textContent = 'Il y a une ou plusieurs erreurs dans le formulaire, veuillez vérifier les champs';
     formError.classList.add('show');
     return;
   }
-  
+
   const fields = {};
   formElements.forEach(element => {
     if (element.type === 'field') {
       const col = element.fieldName;
       const meta = columnMetadata[col] || {};
-      
+
       // Ne collecter que les champs visibles
       if (shouldShowField(element)) {
         fields[col] = getInputValue(col, meta);
       }
     }
   });
-  
+
   try {
     await grist.selectedTable.create({ fields });
-    
+
     // Afficher le message de succès
     formSuccess.classList.add('show');
     setTimeout(() => {
       formSuccess.classList.remove('show');
     }, 3000);
-    
+
     // Réinitialiser le formulaire
     formElements.forEach(element => {
       if (element.type === 'field') {
         const col = element.fieldName;
         const inp = document.getElementById(`input_${col}`);
         const meta = columnMetadata[col] || {};
-        
+
         if (meta.isBool) {
           inp.checked = false;
         } else if (meta.isMultiple) {
@@ -1138,7 +1135,7 @@ addButton.addEventListener('click', async () => {
         }
       }
     });
-    
+
     // Mettre à jour l'affichage conditionnel après réinitialisation
     updateConditionalFields();
   } catch (error) {
