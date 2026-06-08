@@ -4,7 +4,7 @@
 // conditional fields, rich text editing, and field validation.
 // =============================================================================
 
-const { createApp, ref, computed, reactive, onMounted, toRaw } = Vue;
+const { createApp, ref, computed, reactive, onMounted, nextTick, toRaw } = Vue;
 
 // DOMPurify configuration for XSS protection (shared across all sanitization calls)
 const sanitizeConfig = {
@@ -33,8 +33,12 @@ const app = createApp({
     // STATE
     // -------------------------------------------------------------------------
     const columns = ref([]);              // List of column IDs from current table
-    const columnMetadata = ref({});       // Metadata for each column (type, choices, etc.)
-    const formElements = ref([]);         // Form configuration (fields, separators, text)
+    const columnMetadata = ref({});       // Metadata for each column (type, choiceOptions, etc.)
+    // Form configuration (fields, separators, text). Persisted via grist.setOptions.
+    // Each "field" element holds the column ID as `fieldName` (historical name) :
+    // Don't rename without a migration — existing saved configs in production docs
+    // use this property name.
+    const formElements = ref([]);
     const formData = reactive({});        // Current form values
     const errors = reactive({});          // Validation errors per field
     const pendingAttachments = reactive({}); // Temporary storage for file uploads per column
@@ -145,6 +149,34 @@ const app = createApp({
     const dragOverIndex = ref(null);      // Index of element being dragged over
     const dragPosition = ref('');         // 'top' or 'bottom' drop position
 
+    // "Custom dropdown" select state
+    // fieldName of the currently open dropdown, or null. Only one dropdown
+    // can be open at a time, so a single ref is enough.
+    const openDropdown = ref(null);
+    // Search query typed in the search bar, keyed by fieldName so each field
+    // keeps its own query in parallel (preserved when the dropdown closes/reopens).
+    const searchQuery = reactive({});
+    // fieldName currently loading its ref data
+    // Drives the "Chargement..." indicator inside the dropdown.
+    const loadingDropdown = ref(null);
+    // Index of the option highlighted by the keyboard arrows, per fieldName.
+    // Drives aria-activedescendant + the .active CSS class.
+    const activeIndex = reactive({});
+    // DOM refs to the search <input> elements, per fieldName.
+    const searchInputRefs = {};
+    // Current message of the aria-live="polite" region for multi-select fields,
+    // keyed by fieldName. Used to announce "Beauregard ajoutée. 3 sélections."
+    // and similar dynamic add/remove feedback to screen readers.
+    const liveMessage = reactive({});
+
+    // Generate a stable unique id for a formElement entry. Used as the v-for :key
+    // in the main form template — otherwise two separators (content === '') or two
+    // text blocks with the same content would collide and Vue would mis-patch the
+    // DOM on reorder. Persisted on each element via grist.setOptions.
+    function generateUid() {
+      return (crypto?.randomUUID?.()) || ('uid-' + Math.random().toString(36).slice(2) + '-' + Date.now());
+    }
+
     // "Edit popup" (used to edit text) state
     const editPopup = reactive({
       show: false,
@@ -154,22 +186,40 @@ const app = createApp({
       property: ''
     });
 
-    // "Filter popup" (used for conditional) state
-    const filterPopup = reactive({
+    // "Conditional question popup" ("show this field IF field X equals value Y") state
+    const conditionalPopup = reactive({
       show: false,
       index: null,
       field: '',
       operator: 'equals',
       value: '',
       values: [],
-      hasExisting: false
+      // used to show the "Delete" button in the popup
+      hasExisting: false,
+      // true when the selected condition field is a Ref column with too many values
+      // (>200, see MAX_CONDITIONAL_VALUES) to be usable as a condition source.
+      // Drives a "Cette colonne contient trop de valeurs..." warning in the popup.
+      tooManyValues: false
     });
 
-    // "Validation popup" (used for maxLength) state
+    // "Validation popup" (used to set max nb of characters in text or numeric input) state
     const validationPopup = reactive({
       show: false,
       index: null,
       maxLength: '',
+      hasExisting: false
+    });
+
+    // "Ref dropdown filter popup" (filter Ref/RefList options based on another Ref field) state
+    // Ex: filter "Commune" options by the selected "Département".
+    const refDropdownFilterPopup = reactive({
+      show: false,
+      index: null,
+      filterByField: '',
+      eligibleFields: [],
+      linkCol: null,
+      linkColIsMultiple: false,
+      rule: '',
       hasExisting: false
     });
 
@@ -236,8 +286,7 @@ const app = createApp({
         if (el.type !== 'field') return false;
         const meta = columnMetadata.value[el.fieldName];
         if (!meta) return false;
-        return (meta.choices?.length > 0 && !meta.isMultiple) ||
-          (meta.isRef && !meta.isMultiple && meta.refChoices?.length > 0);
+        return (meta.isChoice || meta.isRef) && !meta.isMultiple;
       });
     });
 
@@ -255,9 +304,29 @@ const app = createApp({
 
       // Re-render when value added to ref column (to update ref choices)
       grist.onRecords(() => {
-        getColumnMetadata().then(meta => {
-          columnMetadata.value = meta;
+        getColumnMetadata().then(newMeta => {
+          // Preserve already-loaded ref data from previous metadata
+          // (otherwise the lazy-loaded refOptions would be wiped on every onRecords,
+          // making getOptionLabel fall back to displaying IDs after form submit)
+          for (const colId of Object.keys(newMeta)) {
+            const existing = columnMetadata.value[colId];
+            if (existing?.refDataLoaded) {
+              newMeta[colId].refOptions = existing.refOptions;
+              newMeta[colId].rawRefData = existing.rawRefData;
+              newMeta[colId].refIdToIndex = existing.refIdToIndex;
+              newMeta[colId].refIdToOption = existing.refIdToOption;
+              newMeta[colId].refDataLoaded = true;
+            }
+          }
+          columnMetadata.value = newMeta;
         });
+      });
+
+      // Close dropdowns when clicking outside.
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.custom-select-display') && !e.target.closest('.custom-select-dropdown')) {
+          openDropdown.value = null;
+        }
       });
     });
 
@@ -265,15 +334,29 @@ const app = createApp({
     // COLUMN & METADATA FETCHING
     // -------------------------------------------------------------------------
 
-    // Fetch detailed metadata for all columns (type, choices, refs, etc.)
-    // Returns: { colId: { type, choices, isRef, refChoices, isBool, ... }, ... }
+    // Extract the target table name from a Ref/RefList type string.
+    // "Ref:Communes"     -> "Communes"
+    // "RefList:Products" -> "Products"
+    // non-ref types      -> null
+    function getRefTableName(type) {
+      if (type.startsWith('Ref:')) return type.substring(4);
+      if (type.startsWith('RefList:')) return type.substring(8);
+      return null;
+    }
+
+    // Fetch detailed metadata for all columns.
+    // Returns a flat object: { colId: { type, choiceOptions, isRef, refOptions, isBool, ... }, ... }
+    // Every column has the same shape, fields are populated accoring to type:
+    //   - Choice / ChoiceList → choiceOptions = ["A", "B", "C"], refOptions = [], ...
+    //   - Ref / RefList       → choiceOptions = null,            refOptions = [] (lazy-loaded later), ...
+    //   - other types         → choiceOptions = null,            refOptions = [], ...
     async function getColumnMetadata() {
       try {
         // Get current table name (eg "Table1")
         const table = grist.getTable();
         const currentTableId = await table.getTableId();
 
-        // _grist_Tables_column: list of all columns across all tables
+        // fetchTable(_grist_Tables_column): list of all columns across all tables
         // eg   {
         //     id: [1, 2, 3, 4, 5, 6, 7],
         //     colId: ['Nom', 'Email', 'Date', 'Montant', 'Titre', 'Prix', 'Stock'],
@@ -281,7 +364,7 @@ const app = createApp({
         //   }
         const colsInfo = await grist.docApi.fetchTable('_grist_Tables_column');
 
-        // _grist_Tables: list of all tables in the document
+        // fetchTable(_grist_Tables): list of all tables in the document
         // eg   {
         //     id: [1, 2, 3],  // numeric ref
         //     tableId: ['Clients', 'Commandes', 'Produits']
@@ -315,9 +398,8 @@ const app = createApp({
           if (colId === 'id' || colId === 'manualSort' || colId.startsWith('gristHelper')) continue;
 
           const type = colsInfo.type[i];  // eg: "Text", "Int", "Ref:Clients", "ChoiceList"
-          let choices = null;
-          let refTable = null;
-          let refChoices = [];
+          let choiceOptions = null;
+          let refTableName = null;
 
           // For Choice/ChoiceList columns: extract choices from widgetOptions JSON
           // Example: {"choices": ["Option A", "Option B", "Option C"]}
@@ -325,55 +407,37 @@ const app = createApp({
           if ((type === 'Choice' || type === 'ChoiceList') && colsInfo.widgetOptions?.[i]) {
             try {
               const options = JSON.parse(colsInfo.widgetOptions[i]);
-              if (options.choices) choices = options.choices;
+              if (options.choices) choiceOptions = options.choices;
             } catch (e) { }
           }
 
           // For Ref/RefList columns: extract target table name from type
-          // "Ref:Clients" -> refTable = "Clients"
-          // "RefList:Products" -> refTable = "Products"
-          if (type.startsWith('Ref:')) {
-            refTable = type.substring(4);
-          } else if (type.startsWith('RefList:')) {
-            refTable = type.substring(8);
-          }
+          // "Ref:Clients" -> refTableName = "Clients", "RefList:Products" -> "Products"
+          refTableName = getRefTableName(type);
 
-          // For Ref/RefList: fetch target table and build dropdown choices
-          if (refTable) {
-            try {
-              const refData = await grist.docApi.fetchTable(refTable);
-
-              // visibleCol: for Reference columns: numeric ID of the display column
-              let displayColId = null;
-              const visibleColRef = colsInfo.visibleCol?.[i];
-
-              // Resolve numeric ID -> column name using our index
-              if (visibleColRef && visibleColRef !== 0 && colById[visibleColRef]) {
-                displayColId = colById[visibleColRef].colId;
-              }
-
-              // Fallback: use first non-system column if visibleCol not set
-              if (!displayColId || !refData[displayColId]) {
-                displayColId = Object.keys(refData).find(k => k !== 'id' && k !== 'manualSort');
-              }
-
-              // Build choices array: [{id: 1, label: "Client A"}, {id: 2, label: "Client B"}]
-              refChoices = refData.id.map((id, idx) => ({
-                id,
-                label: displayColId && refData[displayColId] ? refData[displayColId][idx] : id
-              }));
-            } catch (e) { }
+          // For Ref/RefList: resolve display column name from visibleCol.
+          // Actual data fetch is deferred to first dropdown open (see ensureRefDataLoaded)
+          // to avoid blocking the form load for large tables (e.g. 45k communes).
+          let refDisplayCol = null;
+          if (refTableName) {
+            const visibleColRef = colsInfo.visibleCol?.[i];
+            if (visibleColRef && visibleColRef !== 0 && colById[visibleColRef]) {
+              refDisplayCol = colById[visibleColRef].colId;
+            }
           }
 
           // Store all metadata for this column
           metadata[colId] = {
             type,
-            choices,                    // For Choice/ChoiceList: ["A", "B", "C"]
+            choiceOptions,                    // For Choice/ChoiceList: ["A", "B", "C"]
             label: colsInfo.label?.[i] || colId,
             isMultiple: type === 'ChoiceList' || type.startsWith('RefList:'),
+            isChoice: type === 'Choice' || type === 'ChoiceList',
             isRef: type.startsWith('Ref:') || type.startsWith('RefList:'),
-            refTable,                   // Target table name for Ref/RefList
-            refChoices,                 // [{id, label}] for Ref/RefList dropdowns
+            refTableName,                   // Target table name for Ref/RefList
+            refDisplayCol,              // Display column name (from visibleCol), resolved on data load
+            refOptions: [],             // [{id, label}] populated on first dropdown open
+            refDataLoaded: false,       // Whether ref data has been fetched
             isBool: type === 'Bool',
             isDate: type === 'Date',
             isDateTime: type.startsWith('DateTime:'),
@@ -408,6 +472,7 @@ const app = createApp({
         });
 
         formElements.value = editableColumns.map(col => ({
+          _uid: generateUid(),
           type: 'field',
           fieldName: col,
           fieldLabel: columnMetadata.value[col]?.label || col,
@@ -421,6 +486,8 @@ const app = createApp({
       } else {
         // Load existing configuration and sanitize HTML content for XSS protection
         formElements.value = (options.formElements || []).map(el => {
+          // Backfill _uid for existing saved configs that don't have one yet.
+          if (!el._uid) el._uid = generateUid();
           if (el.type === 'text' && el.content) {
             el.content = DOMPurify.sanitize(el.content, sanitizeConfig);
           }
@@ -445,12 +512,19 @@ const app = createApp({
             // conditional: verify that the referenced field is still a valid condition field
             if (el.conditional) {
               const condMeta = columnMetadata.value[el.conditional.field];
-              const isValidConditionField = condMeta && (
-                (condMeta.choices?.length > 0 && !condMeta.isMultiple) ||
-                (condMeta.isRef && !condMeta.isMultiple && condMeta.refChoices?.length > 0)
-              );
+              const isValidConditionField = condMeta
+                && (condMeta.isChoice || condMeta.isRef)
+                && !condMeta.isMultiple;
               if (!isValidConditionField) {
                 delete el.conditional;
+              }
+            }
+
+            // refDropdownFilter: verify that the filter-by field still exists and is Ref/RefList
+            if (el.refDropdownFilter) {
+              const filterMeta = columnMetadata.value[el.refDropdownFilter.filterByField];
+              if (!filterMeta?.isRef) {
+                delete el.refDropdownFilter;
               }
             }
           }
@@ -514,6 +588,7 @@ const app = createApp({
         // Add field element linked to this column
         const meta = columnMetadata.value[col];
         formElements.value.push({
+          _uid: generateUid(),
           type: 'field',
           fieldName: col,
           fieldLabel: meta?.label || col,
@@ -525,11 +600,11 @@ const app = createApp({
         formData[col] = defaultValue(meta);
       } else if (type === 'separator') {
         // Add horizontal separator
-        formElements.value.push({ type: 'separator', content: '' });
+        formElements.value.push({ _uid: generateUid(), type: 'separator', content: '' });
       } else if (type === 'text') {
         // Add text block (allow empty content, user can edit later)
         const content = newElementContent.value.trim();
-        formElements.value.push({ type: 'text', content: content || '' });
+        formElements.value.push({ _uid: generateUid(), type: 'text', content: content || '' });
       }
 
       await saveConfiguration();
@@ -610,8 +685,9 @@ const app = createApp({
     function closeAllPopups() {
       showOverlay.value = false;
       editPopup.show = false;
-      filterPopup.show = false;
+      conditionalPopup.show = false;
       validationPopup.show = false;
+      refDropdownFilterPopup.show = false;
     }
 
     // Show edit popup for field label
@@ -801,78 +877,90 @@ const app = createApp({
     // -------------------------------------------------------------------------
 
     // Show popup to configure conditional display rules for a field
-    function showFilterPopup(index) {
+    async function showConditionalPopup(index) {
       const el = formElements.value[index];
-      filterPopup.index = index;
+      conditionalPopup.index = index;
+      conditionalPopup.tooManyValues = false;
 
       // Check if this field already has a conditional rule configured
-      filterPopup.hasExisting = !!el.conditional;
+      conditionalPopup.hasExisting = !!el.conditional;
 
       // Pre-fill if already configured
       if (el.conditional) {
-        filterPopup.field = el.conditional.field;
-        filterPopup.operator = el.conditional.operator || 'equals';
-        filterPopup.value = el.conditional.value;
-        updateFilterValues();
+        conditionalPopup.field = el.conditional.field;
+        conditionalPopup.operator = el.conditional.operator || 'equals';
+        conditionalPopup.value = el.conditional.value;
+        await updateConditionalValues();
       } else {
-        filterPopup.field = '';
-        filterPopup.operator = 'equals';
-        filterPopup.value = '';
-        filterPopup.values = [];
+        conditionalPopup.field = '';
+        conditionalPopup.operator = 'equals';
+        conditionalPopup.value = '';
+        conditionalPopup.values = [];
       }
 
-      filterPopup.show = true;
+      conditionalPopup.show = true;
       showOverlay.value = true;
     }
 
-    // Populate value dropdown based on selected conditional field
-    // Shows either reference choices (for Ref columns) or choice options (for Choice columns)
-    function updateFilterValues() {
-      // Reset to empty if no field selected
-      if (!filterPopup.field) {
-        filterPopup.values = [];
+    // Max values allowed in the conditional popup. The admin popup uses the native
+    // <select>, which can't render thousands of options without freezing the browser.
+    // TODO: replace the native select with the custom select
+    const MAX_CONDITIONAL_VALUES = 200;
+
+    // Populate dropdown with options of the selected conditional field (Ref or Choice)
+    // Async because ref data may need to be lazy-loaded
+    async function updateConditionalValues() {
+      conditionalPopup.tooManyValues = false;
+
+      if (!conditionalPopup.field) {
+        conditionalPopup.values = [];
         return;
       }
 
-      const meta = columnMetadata.value[filterPopup.field];
+      const meta = columnMetadata.value[conditionalPopup.field];
       if (!meta) {
-        filterPopup.values = [];
+        conditionalPopup.values = [];
         return;
       }
 
-      // For Ref columns: use refChoices (id + label from referenced table)
-      if (meta.refChoices?.length > 0) {
-        filterPopup.values = meta.refChoices;
-      // For Choice columns: use choices array directly
-      } else if (meta.choices?.length > 0) {
-        filterPopup.values = meta.choices.map(c => ({ id: c, label: c }));
+      // For Ref columns: ensure data is loaded then use refOptions
+      if (meta.isRef) {
+        await ensureRefDataLoaded(conditionalPopup.field);
+        if (meta.refOptions.length > MAX_CONDITIONAL_VALUES) {
+          conditionalPopup.tooManyValues = true;
+          conditionalPopup.values = [];
+          return;
+        }
+        conditionalPopup.values = meta.refOptions;
+      } else if (meta.choiceOptions?.length > 0) {
+        conditionalPopup.values = meta.choiceOptions.map(c => ({ id: c, label: c }));
       } else {
-        filterPopup.values = [];
+        conditionalPopup.values = [];
       }
     }
 
     // Save the conditional rule configuration
-    async function saveFilter() {
+    async function saveConditional() {
       // Only save if both field and value are selected, otherwise clear the rule
-      if (filterPopup.field && filterPopup.value) {
-        formElements.value[filterPopup.index].conditional = {
-          field: filterPopup.field,
-          operator: filterPopup.operator,
-          value: filterPopup.value
+      if (conditionalPopup.field && conditionalPopup.value) {
+        formElements.value[conditionalPopup.index].conditional = {
+          field: conditionalPopup.field,
+          operator: conditionalPopup.operator,
+          value: conditionalPopup.value
         };
       } else {
-        formElements.value[filterPopup.index].conditional = null;
+        formElements.value[conditionalPopup.index].conditional = null;
       }
       await saveConfiguration();
-      filterPopup.show = false;
+      conditionalPopup.show = false;
       showOverlay.value = false;
     }
 
     // Remove the conditional rule from this field
-    async function deleteFilter() {
-      formElements.value[filterPopup.index].conditional = null;
+    async function deleteConditional() {
+      formElements.value[conditionalPopup.index].conditional = null;
       await saveConfiguration();
-      filterPopup.show = false;
+      conditionalPopup.show = false;
       showOverlay.value = false;
     }
 
@@ -883,9 +971,8 @@ const app = createApp({
     // Check if metadata indicates a text or numeric field (can have maxLength validation)
     function isTextOrNumericFieldByMeta(meta) {
       if (!meta) return false;
-      return !meta.isBool && !meta.isDate && !meta.isDateTime && !meta.isMultiple && !meta.isAttachment &&
-        (!meta.choices || meta.choices.length === 0) &&
-        (!meta.isRef || meta.refChoices.length === 0);
+      return !meta.isBool && !meta.isDate && !meta.isDateTime && !meta.isMultiple
+        && !meta.isAttachment && !meta.isChoice && !meta.isRef;
     }
 
     // Check if metadata indicates a pure text field (can be multiline)
@@ -948,6 +1035,160 @@ const app = createApp({
     }
 
     // -------------------------------------------------------------------------
+    // DROPDOWN FILTER (filter Ref/RefList options based on another Ref field)
+    // -------------------------------------------------------------------------
+    // Running example used throughout this section:
+    //   Current table: "Projets" with columns:
+    //     - Département (Ref:Departements)
+    //     - Commune (Ref:Communes)
+    //   Table "Communes" has column "Departement" (Ref:Departements) ← the "link column"
+    //
+    //   Goal: when filling the form, filter the Commune dropdown to only show
+    //   communes belonging to the selected Departement.
+    //   Generated rule: choice.Departement == $Departement
+
+    // Check if a form element is a Ref or RefList column
+    function isRefField(element) {
+      if (element.type !== 'field') return false;
+      return !!columnMetadata.value[element.fieldName]?.isRef;
+    }
+
+    // Open the "ref dropdown filter popup" for a given form element.
+    // Fetches _grist_Tables_column on demand (only when user clicks the icon).
+    // Example: user clicks icon for the "Commune" field (Ref:Communes)
+    async function showRefDropdownFilterPopup(index) {
+      const element = formElements.value[index];
+      const meta = columnMetadata.value[element.fieldName];
+      // Defensive: !refTableName should never be true when isRef is true (invariant
+      // of getColumnMetadata), but guards against malformed types like "Ref:".
+      if (!meta?.isRef || !meta.refTableName) return;
+
+      refDropdownFilterPopup.index = index;
+      refDropdownFilterPopup.hasExisting = !!element.refDropdownFilter;
+
+      // Fetch all columns metadata to inspect the referenced table's structure
+      const colsInfo = await grist.docApi.fetchTable('_grist_Tables_column');
+      const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
+
+      // Find Ref/RefList columns in the referenced table.
+      // Example: in table "Communes", find columns like "Departement" (Ref:Departements)
+      const currentRefTableName = meta.refTableName;
+      const currentRefTableNumericId = tablesInfo.id[tablesInfo.tableId.indexOf(currentRefTableName)];
+      const refTableCols = [];
+      for (let i = 0; i < colsInfo.colId.length; i++) {
+        if (colsInfo.parentId[i] !== currentRefTableNumericId) continue;
+        const colType = colsInfo.type[i];
+        if (colType.startsWith('Ref:') || colType.startsWith('RefList:')) {
+          refTableCols.push({ colId: colsInfo.colId[i], type: colType });
+        }
+      }
+
+      // Find eligible form fields: Ref/RefList fields whose referenced table
+      // is pointed to by a column in the current column's referenced table.
+      // Example: "Departement" (Ref:Departements) is eligible because table "Communes"
+      // has a column pointing to "Departements"
+      const eligible = [];
+      for (const el of formElements.value) {
+        if (el.type !== 'field' || el.fieldName === element.fieldName) continue;
+        const elMeta = columnMetadata.value[el.fieldName];
+        if (!elMeta?.isRef || !elMeta.refTableName) continue;
+
+        const hasLink = refTableCols.some(col => getRefTableName(col.type) === elMeta.refTableName);
+        if (hasLink) {
+          eligible.push({ fieldName: el.fieldName, label: el.fieldLabel || el.fieldName });
+        }
+      }
+
+      refDropdownFilterPopup.eligibleFields = eligible;
+      // Store refTableCols for use in onRefDropdownFilterFieldChange
+      refDropdownFilterPopup._refTableCols = refTableCols;
+
+      // Pre-fill if already configured
+      if (element.refDropdownFilter) {
+        refDropdownFilterPopup.filterByField = element.refDropdownFilter.filterByField;
+        onRefDropdownFilterFieldChange();
+      } else {
+        refDropdownFilterPopup.filterByField = '';
+        refDropdownFilterPopup.linkCol = null;
+        refDropdownFilterPopup.rule = '';
+      }
+
+      refDropdownFilterPopup.show = true;
+      showOverlay.value = true;
+    }
+
+    // Called when user selects a filter-by field in the ref filter popup.
+    // Auto-detects the link column in the referenced table and builds the display rule.
+    // Example: user picks "Departement" → we find "Departement" (Ref:Departements)
+    // in table "Communes" → rule: choice.Departement == $Departement
+    function onRefDropdownFilterFieldChange() {
+      const filterByField = refDropdownFilterPopup.filterByField;
+      if (!filterByField) {
+        refDropdownFilterPopup.linkCol = null;
+        refDropdownFilterPopup.rule = '';
+        return;
+      }
+
+      const filterMeta = columnMetadata.value[filterByField];
+      const refTableCols = refDropdownFilterPopup._refTableCols || [];
+
+      // Find the column in the referenced table that points to the filter field's table.
+      // Example: in "Communes", find the column whose type is Ref:Departements
+      const linkCol = refTableCols.find(col => getRefTableName(col.type) === filterMeta.refTableName);
+
+      if (!linkCol) {
+        refDropdownFilterPopup.linkCol = null;
+        refDropdownFilterPopup.rule = '';
+        return;
+      }
+
+      refDropdownFilterPopup.linkCol = linkCol;
+      const linkColIsMultiple = linkCol.type.startsWith('RefList:');
+      refDropdownFilterPopup.linkColIsMultiple = linkColIsMultiple;
+      const filterIsMultiple = filterMeta.isMultiple;
+
+      // Build display rule based on column types:
+      // - Ref vs Ref       → choice.Departement == $Departement
+      // - Ref vs RefList    → choice.Departement in $Departements
+      // - RefList vs Ref    → $Departement in choice.Departements
+      // - RefList vs RefList → choice.Departements ∩ $Departements
+      if (linkColIsMultiple && !filterIsMultiple) {
+        refDropdownFilterPopup.rule = `$${filterByField} in choice.${linkCol.colId}`;
+      } else if (!linkColIsMultiple && filterIsMultiple) {
+        refDropdownFilterPopup.rule = `choice.${linkCol.colId} in $${filterByField}`;
+      } else if (!linkColIsMultiple && !filterIsMultiple) {
+        refDropdownFilterPopup.rule = `choice.${linkCol.colId} == $${filterByField}`;
+      } else {
+        refDropdownFilterPopup.rule = `choice.${linkCol.colId} ∩ $${filterByField}`;
+      }
+    }
+
+    // Save the ref filter configuration to the form element
+    async function saveRefDropdownFilter() {
+      if (refDropdownFilterPopup.filterByField && refDropdownFilterPopup.linkCol) {
+        formElements.value[refDropdownFilterPopup.index].refDropdownFilter = {
+          filterByField: refDropdownFilterPopup.filterByField,
+          refTableLinkCol: refDropdownFilterPopup.linkCol.colId,
+          linkColIsMultiple: refDropdownFilterPopup.linkColIsMultiple,
+          rule: refDropdownFilterPopup.rule
+        };
+      } else {
+        formElements.value[refDropdownFilterPopup.index].refDropdownFilter = null;
+      }
+      await saveConfiguration();
+      refDropdownFilterPopup.show = false;
+      showOverlay.value = false;
+    }
+
+    // Remove the ref filter from this field
+    async function deleteRefDropdownFilter() {
+      formElements.value[refDropdownFilterPopup.index].refDropdownFilter = null;
+      await saveConfiguration();
+      refDropdownFilterPopup.show = false;
+      showOverlay.value = false;
+    }
+
+    // -------------------------------------------------------------------------
     // CONDITIONAL FIELD DISPLAY (only available for column types Choice and Ref)
     // -------------------------------------------------------------------------
 
@@ -986,11 +1227,14 @@ const app = createApp({
     // FORM INPUT HELPERS
     // -------------------------------------------------------------------------
 
-    // Generate label HTML with required star if needed
+    // Generate label HTML with required star if needed.
+    // The star is `aria-hidden` because screen readers shouldn't read "*"
+    // as if it conveyed meaning — the input itself carries `aria-required`,
+    // which is what SRs announce as "obligatoire".
     function getLabelHtml(element) {
       let html = element.fieldLabel || element.fieldName;
       if (element.required) {
-        html += ' <span class="required-star">*</span>';
+        html += ' <span class="required-star" aria-hidden="true">*</span>';
       }
       return html;
     }
@@ -1000,7 +1244,7 @@ const app = createApp({
     function hasSelectOptions(element) {
       const meta = columnMetadata.value[element.fieldName];
       if (!meta) return false;
-      return (meta.choices?.length > 0) || (meta.isRef && meta.refChoices?.length > 0);
+      return meta.isChoice || meta.isRef;
     }
 
     // Get options for select dropdown
@@ -1009,17 +1253,442 @@ const app = createApp({
       const meta = columnMetadata.value[element.fieldName];
       if (!meta) return [];
 
-      // For Ref/RefList columns: use refChoices (id + label from referenced table)
-      if (meta.refChoices?.length > 0) {
-        return meta.refChoices;
+      // For Ref/RefList columns: use refOptions (id + label from referenced table)
+      if (meta.refOptions?.length > 0) {
+        return meta.refOptions;
       }
 
       // For Choice/ChoiceList columns: map choices to {id, label} format
-      if (meta.choices?.length > 0) {
-        return meta.choices.map(c => ({ id: c, label: c }));
+      if (meta.choiceOptions?.length > 0) {
+        return meta.choiceOptions.map(c => ({ id: c, label: c }));
       }
 
       return [];
+    }
+
+    // -------------------------------------------------------------------------
+    // LAZY LOADING FOR REF/REFLIST DATA
+    // -------------------------------------------------------------------------
+
+    // Fetch ref table data on first dropdown open (not at form load).
+    // For a 45k communes table, this avoids blocking the initial render.
+    async function ensureRefDataLoaded(colId) {
+      const meta = columnMetadata.value[colId];
+      if (!meta?.isRef || !meta.refTableName || meta.refDataLoaded) return;
+
+      loadingDropdown.value = colId;
+      try {
+        const refData = await grist.docApi.fetchTable(meta.refTableName);
+        const displayColId = meta.refDisplayCol;
+
+        // Pre-compute lowerLabel for search filter (avoids 45k toLowerCase per keystroke).
+        // Sort alphabetically (locale-aware, French) so the slice(MAX_DISPLAYED_OPTIONS)
+        // cap shows a meaningful slice when a ref dropdown filter narrows the list to
+        // 100+ results across multiple groups (e.g. communes from 2+ départements).
+        const collator = new Intl.Collator('fr');
+        meta.refOptions = refData.id.map((id, idx) => {
+          const label = displayColId && refData[displayColId] ? refData[displayColId][idx] : id;
+          return { id, label, lowerLabel: String(label).toLowerCase() };
+        }).sort((a, b) => collator.compare(String(a.label), String(b.label)));
+        meta.rawRefData = refData;
+        // O(1) id→index for refDropdownFilter (replaces rawRefData.id.indexOf in a 45k filter loop).
+        meta.refIdToIndex = new Map(refData.id.map((id, idx) => [id, idx]));
+        // O(1) id→choice for getOptionLabel (replaces .find on 45k per displayed tag).
+        meta.refIdToOption = new Map(meta.refOptions.map(c => [c.id, c]));
+        meta.refDataLoaded = true;
+      } catch (e) {
+        errors[colId] = 'Erreur lors du chargement des données';
+      }
+      loadingDropdown.value = null;
+    }
+
+    // -------------------------------------------------------------------------
+    // CUSTOM SELECT (with search and chips)
+    // -------------------------------------------------------------------------
+
+    // For Int / Numeric columns rendered as <input type="text">, return the
+    // matching `inputmode` so mobile keyboards show the right keypad and
+    // screen readers can identify the field as numeric.
+    function getInputMode(element) {
+      const meta = columnMetadata.value[element.fieldName];
+      if (meta?.isInt) return 'numeric';
+      if (meta?.isNumeric) return 'decimal';
+      return null;
+    }
+
+    // sr-only hint text announced via aria-describedby on numeric fields.
+    // Without this, the SR would just say "modifier le texte, vierge" with
+    // no indication that a number is expected.
+    function getNumericHint(element) {
+      const meta = columnMetadata.value[element.fieldName];
+      if (meta?.isInt) return 'Valeur entière attendue';
+      if (meta?.isNumeric) return 'Valeur numérique attendue';
+      return null;
+    }
+
+    // aria-describedby value for date/datetime inputs.
+    // Always returns the hint id — needed because native date inputs
+    // are announced poorly (e.g. segments read as "NaN" when empty by WebKit/Gecko)
+    function dateInputDescribedBy(element) {
+      const fieldName = element.fieldName;
+      const ids = ['hint_date_' + fieldName];
+      if (errors[fieldName]) ids.push('err_' + fieldName);
+      return ids.join(' ');
+    }
+
+    // aria-describedby for the default text input — combines the numeric hint
+    // (if any) and the error message (if any).
+    function textInputDescribedBy(element) {
+      const fieldName = element.fieldName;
+      const ids = [];
+      if (getNumericHint(element)) ids.push('hint_' + fieldName);
+      if (errors[fieldName]) ids.push('err_' + fieldName);
+      return ids.length ? ids.join(' ') : null;
+    }
+
+    // aria-labelledby for the combobox trigger.
+    //   Single : label + currently displayed value span → SR reads "Field, value, combobox"
+    //   Multi  : label only (the selections are conveyed via aria-describedby + chips)
+    function comboLabelledBy(element) {
+      const fieldName = element.fieldName;
+      const meta = columnMetadata.value[fieldName];
+      if (meta?.isMultiple) return 'label_' + fieldName;
+      return 'label_' + fieldName + ' value_' + fieldName;
+    }
+
+    // Build the aria-describedby attribute value for the combobox trigger.
+    // Always includes :
+    //   - "Avec recherche" hint, so screen-reader users know the list is filterable
+    //     (otherwise they have no way to discover the search).
+    // For multi-select, also :
+    //   - "Sélection multiple" hint (aria-multiselectable is only announced when
+    //     the SR enters the listbox, not on the combobox itself).
+    //   - count helper ("3 sélections" / "Aucune sélection").
+    // Plus the error message id when the field is invalid.
+    function comboDescribedBy(element) {
+      const fieldName = element.fieldName;
+      const ids = ['search_hint_' + fieldName];
+      if (columnMetadata.value[fieldName]?.isMultiple) {
+        ids.push('multi_hint_' + fieldName);
+        ids.push('count_' + fieldName);
+      }
+      if (errors[fieldName]) {
+        ids.push('err_' + fieldName);
+      }
+      return ids.join(' ');
+    }
+
+    // Human-readable count for the multi-select sr-only span (read at the
+    // combobox via aria-describedby). "X sélection(s)"
+    function getCountText(element) {
+      const count = (formData[element.fieldName] || []).length;
+      if (count === 0) return 'Aucune sélection';
+      return count + ' sélection' + (count > 1 ? 's' : '');
+    }
+
+    // Push a message into the live region for this field. Polite, atomic.
+    // Only used on user-driven actions (add / remove / no result),
+    // not on every keystroke.
+    function announce(fieldName, message) {
+      liveMessage[fieldName] = message;
+      // Clear shortly after so an identical follow-up message re-triggers SR
+      setTimeout(() => {
+        if (liveMessage[fieldName] === message) liveMessage[fieldName] = '';
+      }, 1500);
+    }
+
+    // Toggle dropdown open/close. Opens immediately and shows "Chargement..."
+    // inside while ref data is being fetched (lazy load).
+    // openDropdown is a single ref (not an object) so only ONE dropdown can be
+    // open at a time — opening a new one automatically closes any previous one.
+    async function toggleDropdown(fieldName) {
+      if (openDropdown.value === fieldName) {       // this dropdown already open?
+        openDropdown.value = null;                  //   yes → close it
+      } else {
+        openDropdown.value = fieldName;             //   no  → open it (and implicitly close any other)
+        searchQuery[fieldName] = '';                // reset the search query
+        activeIndex[fieldName] = 0;                 // reset the keyboard-highlighted option
+        await ensureRefDataLoaded(fieldName);       // lazy load ref data if not fetched yet
+        await nextTick();                           // wait for Vue to render the search input
+        searchInputRefs[fieldName]?.focus();        // focus the search input
+      }
+    }
+
+    // Vue template ref callback — stores the search input element by fieldName,
+    // or clears it on unmount so we don't focus a detached node later.
+    function setSearchInputRef(fieldName, el) {
+      if (el) searchInputRefs[fieldName] = el;
+      else delete searchInputRefs[fieldName];
+    }
+
+    // aria-activedescendant: id of the currently highlighted option (or null)
+    function activeOptionId(element) {
+      const idx = activeIndex[element.fieldName];
+      if (idx == null) return null;
+      return 'opt_' + element.fieldName + '_' + idx;
+    }
+
+    // Scroll the highlighted option into view (after a keyboard move)
+    function scrollActiveIntoView(fieldName) {
+      nextTick(() => {
+        const idx = activeIndex[fieldName];
+        if (idx == null) return;
+        document.getElementById('opt_' + fieldName + '_' + idx)?.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    // Keyboard on the combobox trigger (when closed):
+    //   Enter / Space / ArrowDown / ArrowUp → open
+    //   any printable character → open and seed the search with that character
+    function onSelectKeydown(element, e) {
+      const fieldName = element.fieldName;
+      if (openDropdown.value === fieldName) return;
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        toggleDropdown(fieldName);
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        openDropdown.value = fieldName;
+        searchQuery[fieldName] = e.key;
+        activeIndex[fieldName] = 0;
+        ensureRefDataLoaded(fieldName).then(() => {
+          nextTick(() => searchInputRefs[fieldName]?.focus());
+        });
+      }
+    }
+
+    // Input handler: reset the keyboard-active option to the top of the filtered list.
+    function onSearchInput(element, e) {
+      const fieldName = element.fieldName;
+      activeIndex[fieldName] = 0;
+    }
+
+    // Keyboard on the search input (focus lives here while dropdown is open).
+    // Arrow Up/Down navigate, Enter selects, Escape closes, Tab closes and moves on,
+    // Home/End jump to first/last visible option, Backspace on empty input
+    // removes the last chip (multi-select only — Gmail-style convention).
+    function onSearchKeydown(element, e) {
+      const fieldName = element.fieldName;
+      const meta = columnMetadata.value[fieldName];
+      const options = getFilteredOptions(element);
+      const curr = activeIndex[fieldName] ?? -1;
+      const focusTrigger = () => nextTick(() => document.getElementById('combo_' + fieldName)?.focus());
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        openDropdown.value = null;
+        focusTrigger();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!options.length) return;
+        activeIndex[fieldName] = (curr + 1) % options.length;
+        scrollActiveIntoView(fieldName);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!options.length) return;
+        activeIndex[fieldName] = curr <= 0 ? options.length - 1 : curr - 1;
+        scrollActiveIntoView(fieldName);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        if (!options.length) return;
+        activeIndex[fieldName] = 0;
+        scrollActiveIntoView(fieldName);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        if (!options.length) return;
+        activeIndex[fieldName] = options.length - 1;
+        scrollActiveIntoView(fieldName);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (curr >= 0 && options[curr]) {
+          selectOption(element, options[curr].id);
+          // Single-select closed the dropdown — return focus to the trigger.
+          // (selectOption already does this for single, but harmless to be explicit.)
+          if (!meta?.isMultiple) focusTrigger();
+        }
+      } else if (e.key === 'Backspace' && meta?.isMultiple && !searchQuery[fieldName]) {
+        // Empty input + Backspace → remove the last chip
+        const current = formData[fieldName] || [];
+        if (current.length > 0) {
+          e.preventDefault();
+          const lastIdx = current.length - 1;
+          removeSelection(element, current[lastIdx], lastIdx, e);
+        }
+      } else if (e.key === 'Tab') {
+        openDropdown.value = null; // let Tab move focus naturally
+      }
+    }
+
+    // Resolve a stored ID to its display label.
+    function getOptionLabel(element, value) {
+      const meta = columnMetadata.value[element.fieldName];
+      if (meta?.refIdToOption) {
+        const opt = meta.refIdToOption.get(value);
+        return opt ? opt.label : value;
+      }
+      const opt = getSelectOptions(element).find(o => o.id === value);
+      return opt ? opt.label : value;
+    }
+
+    // Max options displayed in a dropdown (avoid rendering 45k DOM nodes)
+    const MAX_DISPLAYED_OPTIONS = 100;
+
+    // Get filtered options based on search query and optional ref dropdown filter.
+    // Results are capped at MAX_DISPLAYED_OPTIONS to avoid DOM performance issues.
+    // The ref dropdown filter block only runs if element.refDropdownFilter is configured.
+    function getFilteredOptions(element) {
+      let options = getSelectOptions(element);
+      const searchBarQuery = (searchQuery[element.fieldName] || '').toLowerCase();
+      if (searchBarQuery) {
+        // Use pre-computed lowerLabel for ref options; fallback to toLowerCase for Choice.
+        options = options.filter(o =>
+          (o.lowerLabel || o.label.toLowerCase()).includes(searchBarQuery)
+        );
+      }
+
+      // Apply ref dropdown filter only if configured
+      const refDropdownFilter = element.refDropdownFilter;
+      if (refDropdownFilter) {
+        const meta = columnMetadata.value[element.fieldName];
+        const filterValue = formData[refDropdownFilter.filterByField];
+
+        if (filterValue && !(Array.isArray(filterValue) && filterValue.length === 0)) {
+          const rawRefData = meta.rawRefData;
+          const refIdToIndex = meta.refIdToIndex;
+          if (rawRefData && refIdToIndex) {
+            const linkCol = refDropdownFilter.refTableLinkCol;
+            const linkColIsMultiple = refDropdownFilter.linkColIsMultiple;
+            const filterIsMultiple = Array.isArray(filterValue);
+
+            // Example: Commune (Ref:Communes) filtered by Departement (Ref:Departements)
+            // For each commune option, check if its Departement matches the selected one.
+            // refIdToIndex.get is O(1) vs rawRefData.id.indexOf which was O(n) → killed the n² blow-up.
+            options = options.filter(opt => {
+              const refIdx = refIdToIndex.get(opt.id);
+              if (refIdx === undefined) return true;
+
+              const linkValue = rawRefData[linkCol]?.[refIdx];
+
+              if (linkColIsMultiple && !filterIsMultiple) {
+                // $Departement in choice.Departements (RefList)
+                if (Array.isArray(linkValue) && linkValue[0] === 'L') {
+                  return linkValue.slice(1).includes(parseInt(filterValue));
+                }
+                return false;
+              } else if (!linkColIsMultiple && filterIsMultiple) {
+                // choice.Departement in $Departements
+                return filterValue.map(v => parseInt(v)).includes(parseInt(linkValue));
+              } else if (!linkColIsMultiple && !filterIsMultiple) {
+                // choice.Departement == $Departement
+                return parseInt(linkValue) === parseInt(filterValue);
+              } else {
+                // Both RefList: intersection
+                if (Array.isArray(linkValue) && linkValue[0] === 'L') {
+                  const linkIds = linkValue.slice(1).map(v => parseInt(v));
+                  const filterIds = filterValue.map(v => parseInt(v));
+                  return linkIds.some(id => filterIds.includes(id));
+                }
+                return false;
+              }
+            });
+          }
+        }
+      }
+
+      return options.slice(0, MAX_DISPLAYED_OPTIONS);
+    }
+
+    // Check if there are more options than what's displayed
+    function hasMoreOptions(element) {
+      return getSelectOptions(element).length > MAX_DISPLAYED_OPTIONS;
+    }
+
+    // Check if option is selected
+    function isOptionSelected(fieldName, optionId) {
+      const meta = columnMetadata.value[fieldName];
+      if (meta?.isMultiple) {
+        return (formData[fieldName] || []).includes(optionId);
+      }
+      return formData[fieldName] === optionId;
+    }
+
+    // Select an option (handles both single and multiple).
+    // Multi-select also pushes a polite announcement ("X ajoutée/retirée, N sélection(s)")
+    // for screen-reader users
+    function selectOption(element, optionId) {
+      const fieldName = element.fieldName;
+      const meta = columnMetadata.value[fieldName];
+
+      if (meta?.isMultiple) {
+        const current = formData[fieldName] || [];
+        const index = current.indexOf(optionId);
+        const label = getOptionLabel(element, optionId);
+        if (index > -1) {
+          current.splice(index, 1);
+          formData[fieldName] = [...current];
+          announce(fieldName, `${label} retirée. ${getCountText(element)}.`);
+        } else {
+          current.push(optionId);
+          formData[fieldName] = [...current];
+          announce(fieldName, `${label} ajoutée. ${getCountText(element)}.`);
+        }
+      } else {
+        // Single: select and close, focus back to the trigger.
+        formData[fieldName] = optionId;
+        openDropdown.value = null;
+        nextTick(() => document.getElementById('combo_' + fieldName)?.focus());
+      }
+    }
+
+    // Remove a selection from chips (multi-select only).
+    // Manages focus after removal so the user isn't dumped back on <body>:
+    //   - was the last chip → focus the previous chip
+    //   - was somewhere in the middle → focus the chip now at the same index
+    //   - was the only chip → focus the combobox trigger
+    function removeSelection(element, value, idx, event) {
+      const fieldName = element.fieldName;
+      const current = formData[fieldName] || [];
+      // Defensive: trust idx, but fall back to indexOf if positions ever desync.
+      const removeIdx = (current[idx] === value) ? idx : current.indexOf(value);
+      if (removeIdx === -1) return;
+
+      const label = getOptionLabel(element, value);
+      current.splice(removeIdx, 1);
+      formData[fieldName] = [...current];
+      announce(fieldName, `${label} retirée. ${getCountText(element)}.`);
+
+      // Focus management only when removal originated from a chip interaction
+      // (keyboard or click on the chip button itself). If the user removed via
+      // the option list or backspace-on-empty-input, focus stays where it is.
+      const fromChip = event?.target?.closest?.('.chip');
+      if (!fromChip) return;
+
+      // If the dropdown was open, close it — the user just switched to chip
+      // context, leaving the search input mid-typing would be confusing.
+      if (openDropdown.value === fieldName) openDropdown.value = null;
+
+      const newCount = current.length;
+      nextTick(() => {
+        let focusEl;
+        if (newCount === 0) {
+          focusEl = document.getElementById('combo_' + fieldName);
+        } else if (removeIdx >= newCount) {
+          focusEl = document.getElementById('chip_' + fieldName + '_' + (newCount - 1));
+        } else {
+          focusEl = document.getElementById('chip_' + fieldName + '_' + removeIdx);
+        }
+        focusEl?.focus();
+      });
+    }
+
+    // Keyboard on a chip button: Delete/Backspace remove it.
+    // Enter/Space already trigger the button's native click — nothing to do.
+    function onChipKeydown(element, value, idx, e) {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        removeSelection(element, value, idx, e);
+      }
     }
 
     // -------------------------------------------------------------------------
@@ -1204,7 +1873,8 @@ const app = createApp({
       dragOverIndex,
       dragPosition,
       editPopup,
-      filterPopup,
+      conditionalPopup,
+      refDropdownFilterPopup,
       validationPopup,
       richEditor,
       colorPicker,
@@ -1212,6 +1882,11 @@ const app = createApp({
       editorColors,
       emojis,
       activeFormats,
+      openDropdown,
+      loadingDropdown,
+      searchQuery,
+      activeIndex,
+      liveMessage,
 
       // Computed
       containerStyle,
@@ -1248,10 +1923,15 @@ const app = createApp({
       closePickersOnClickOutside,
       closeEditPopup,
       saveRichEdit,
-      showFilterPopup,
-      updateFilterValues,
-      saveFilter,
-      deleteFilter,
+      showConditionalPopup,
+      updateConditionalValues,
+      saveConditional,
+      deleteConditional,
+      showRefDropdownFilterPopup,
+      onRefDropdownFilterFieldChange,
+      saveRefDropdownFilter,
+      deleteRefDropdownFilter,
+      isRefField,
       isTextOrNumericField,
       isPureTextField,
       showValidationPopup,
@@ -1262,6 +1942,26 @@ const app = createApp({
       getLabelHtml,
       hasSelectOptions,
       getSelectOptions,
+      toggleDropdown,
+      setSearchInputRef,
+      activeOptionId,
+      onSelectKeydown,
+      onSearchKeydown,
+      onSearchInput,
+      onChipKeydown,
+      getCountText,
+      comboLabelledBy,
+      comboDescribedBy,
+      getInputMode,
+      getNumericHint,
+      textInputDescribedBy,
+      dateInputDescribedBy,
+      getOptionLabel,
+      getFilteredOptions,
+      hasMoreOptions,
+      isOptionSelected,
+      selectOption,
+      removeSelection,
       submitForm
     };
   }
